@@ -21,92 +21,7 @@ A solução adota uma arquitetura distribuída orientada a serviços, com separa
 
 ---
 
-## 2. Representação Global
-
-```mermaid
-flowchart TD
-    CLIENT[Frontend React]
-    GATEWAY[API Gateway :8000]
-
-    IAM[IAM Service :8001]
-    PATIENT[Patient Service :8002]
-    CLINICAL[Clinical Service :8003]
-    AI[AI Service :8004]
-    REPORTING[Reporting Service :8005]
-
-    IAMDB[(PostgreSQL IAM)]
-    PATIENTDB[(PostgreSQL Patient)]
-    CLINICALDB[(PostgreSQL Clinical)]
-    REPORTINGDB[(PostgreSQL Reporting)]
-    AIDB[(MongoDB AI)]
-
-    REDIS[(Redis)]
-    RABBIT[(RabbitMQ)]
-    MINIO[(MinIO S3)]
-
-    PROMETHEUS[Prometheus]
-    GRAFANA[Grafana]
-    LOKI[Loki]
-    TEMPO[Tempo]
-    ALERTMANAGER[Alertmanager]
-
-    CLIENT --> GATEWAY
-    GATEWAY --> IAM
-    GATEWAY --> PATIENT
-    GATEWAY --> CLINICAL
-    GATEWAY --> AI
-    GATEWAY --> REPORTING
-
-    IAM --> IAMDB
-    PATIENT --> PATIENTDB
-    CLINICAL --> CLINICALDB
-    REPORTING --> REPORTINGDB
-    AI --> AIDB
-
-    IAM --> REDIS
-    GATEWAY --> REDIS
-    AI --> REDIS
-    REPORTING --> REDIS
-
-    IAM --> RABBIT
-    PATIENT --> RABBIT
-    CLINICAL --> RABBIT
-    AI --> RABBIT
-    REPORTING --> RABBIT
-
-    CLINICAL --> MINIO
-    REPORTING --> MINIO
-
-    IAM --> PROMETHEUS
-    PATIENT --> PROMETHEUS
-    CLINICAL --> PROMETHEUS
-    AI --> PROMETHEUS
-    REPORTING --> PROMETHEUS
-    GATEWAY --> PROMETHEUS
-
-    IAM --> LOKI
-    PATIENT --> LOKI
-    CLINICAL --> LOKI
-    AI --> LOKI
-    REPORTING --> LOKI
-    GATEWAY --> LOKI
-
-    IAM --> TEMPO
-    PATIENT --> TEMPO
-    CLINICAL --> TEMPO
-    AI --> TEMPO
-    REPORTING --> TEMPO
-    GATEWAY --> TEMPO
-
-    PROMETHEUS --> GRAFANA
-    LOKI --> GRAFANA
-    TEMPO --> GRAFANA
-    PROMETHEUS --> ALERTMANAGER
-```
-
----
-
-## 3. Estilo Arquitetural
+## 2. Estilo Arquitetural
 
 | Camada | Papel |
 |--------|------|
@@ -120,7 +35,7 @@ flowchart TD
 
 ---
 
-## 4. Mapa de Serviços
+## 3. Mapa de Serviços
 
 | Serviço | Porta | Responsabilidade | Banco |
 |--------|-------|------------------|-------|
@@ -133,7 +48,7 @@ flowchart TD
 
 ---
 
-## 5. Fluxo de Comunicação
+## 4. Fluxo de Comunicação
 
 ```mermaid
 flowchart LR
@@ -169,7 +84,7 @@ flowchart LR
 
 ---
 
-## 6. Padrões de Projeto Aplicados
+## 5. Padrões de Projeto Aplicados
 
 - API Gateway Pattern
 - Database per Service
@@ -182,7 +97,7 @@ flowchart LR
 
 ---
 
-## 7. Dependências Entre Serviços
+## 6. Dependências Entre Serviços
 
 | Origem | Destino | Motivo |
 |--------|---------|--------|
@@ -195,7 +110,7 @@ flowchart LR
 
 ---
 
-## 8. Infraestrutura de Suporte
+## 7. Infraestrutura de Suporte
 
 | Componente | Função |
 |------------|--------|
