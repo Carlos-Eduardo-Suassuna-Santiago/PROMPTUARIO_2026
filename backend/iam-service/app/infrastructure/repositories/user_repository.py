@@ -50,11 +50,13 @@ class UserRepository:
         self.session.add(user)
         await self.session.flush()
         await self.session.refresh(user)
+        await self.session.commit()
         return user
 
     async def update(self, user: User) -> User:
         await self.session.flush()
         await self.session.refresh(user)
+        await self.session.commit()
         return user
 
     async def exists_by_email(self, email: str) -> bool:
@@ -75,6 +77,7 @@ class RefreshTokenRepository:
     async def save(self, refresh_token: RefreshToken) -> None:
         self.session.add(refresh_token)
         await self.session.flush()
+        await self.session.commit()
 
     async def get_valid(self, token: str) -> RefreshToken | None:
         token_hash = self._hash(token)
@@ -93,6 +96,7 @@ class RefreshTokenRepository:
         if rt:
             rt.revoked = True
             await self.session.flush()
+            await self.session.commit()
 
     async def revoke_all_for_user(self, user_id: str) -> None:
         result = await self.session.execute(
@@ -104,3 +108,4 @@ class RefreshTokenRepository:
         for rt in result.scalars().all():
             rt.revoked = True
         await self.session.flush()
+        await self.session.commit()

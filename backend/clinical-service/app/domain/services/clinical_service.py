@@ -236,6 +236,7 @@ class PrescriptionService:
         self.session.add(rx)
         await self.session.flush()
         await self.session.refresh(rx)
+        await self.session.commit()
 
         # Publish event — PDF generation is async (worker picks this up)
         await self.publisher.publish(
@@ -274,6 +275,7 @@ class ExamRequestService:
         self.session.add(exam)
         await self.session.flush()
         await self.session.refresh(exam)
+        await self.session.commit()
         return exam
 
     async def record_result(self, record_id: str, exam_id: str, data: ExamResultUpdate, doctor_id: str) -> ExamRequest:

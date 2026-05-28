@@ -75,11 +75,13 @@ class AppointmentRepository:
         self.session.add(appt)
         await self.session.flush()
         await self.session.refresh(appt)
+        await self.session.commit()
         return appt
 
     async def update(self, appt: Appointment) -> Appointment:
         await self.session.flush()
         await self.session.refresh(appt)
+        await self.session.commit()
         return appt
 
 
@@ -120,16 +122,19 @@ class MedicalRecordRepository:
         self.session.add(record)
         await self.session.flush()
         await self.session.refresh(record)
+        await self.session.commit()
         return record
 
     async def update(self, record: MedicalRecord) -> MedicalRecord:
         await self.session.flush()
         await self.session.refresh(record)
+        await self.session.commit()
         return record
 
     async def add_history(self, history: MedicalRecordHistory) -> None:
         self.session.add(history)
         await self.session.flush()
+        await self.session.commit()
 
 
 class PatientProjectionRepository:
@@ -146,3 +151,4 @@ class PatientProjectionRepository:
         else:
             self.session.add(projection)
         await self.session.flush()
+        await self.session.commit()
