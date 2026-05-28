@@ -153,39 +153,9 @@ frontend/
     ├── utils/
     └── types/
 ```
-
 ---
 
-# 4. C4 — CONTEXT DIAGRAM
-
-```mermaid
-C4Context
-title Distributed Medical SaaS Platform - Context Diagram
-
-Person(patient, "Patient")
-Person(doctor, "Doctor")
-Person(attendant, "Attendant")
-Person(admin, "Administrator")
-
-System(platform, "Medical SaaS Platform")
-
-System_Ext(storage, "Object Storage")
-System_Ext(email, "Email Service")
-System_Ext(ai_provider, "Future AI Provider")
-
-Rel(patient, platform, "Views medical data")
-Rel(doctor, platform, "Manages clinical workflows")
-Rel(attendant, platform, "Registers patients")
-Rel(admin, platform, "Administration & analytics")
-
-Rel(platform, storage, "Stores PDFs & files")
-Rel(platform, email, "Sends notifications")
-Rel(platform, ai_provider, "Future AI integrations")
-```
-
----
-
-# 5. C4 — CONTAINER DIAGRAM
+# 4. C4 — CONTAINER DIAGRAM
 
 ```mermaid
 C4Container
@@ -237,7 +207,7 @@ Rel(reporting, rabbit, "Consumes events")
 
 ---
 
-# 6. API GATEWAY ARCHITECTURE
+# 5. API GATEWAY ARCHITECTURE
 
 ## Responsabilidades
 
@@ -295,7 +265,7 @@ CACHE --> OBS
 
 ---
 
-# 7. IAM SERVICE
+# 6. IAM SERVICE
 
 ## Responsabilidades
 
@@ -388,7 +358,7 @@ Tabelas:
 
 ---
 
-# 8. PATIENT SERVICE
+# 7. PATIENT SERVICE
 
 ## Responsabilidades
 
