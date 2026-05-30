@@ -10,7 +10,6 @@ PROMPTUARIO API Gateway
 from __future__ import annotations
 
 import logging
-import sys
 import time
 from typing import Any
 
@@ -21,6 +20,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from shared.observability import setup_observability
 from shared.utils.security import decode_token
 
 # ─── Settings ────────────────────────────────────────────────────────────────
@@ -49,11 +49,6 @@ class Settings(BaseSettings):
 
 settings = Settings()
 
-logging.basicConfig(
-    level=getattr(logging, settings.LOG_LEVEL),
-    format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
-    stream=sys.stdout,
-)
 logger = logging.getLogger(__name__)
 
 # ─── Route table ─────────────────────────────────────────────────────────────
@@ -91,6 +86,8 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+setup_observability(app, service_name=settings.SERVICE_NAME, log_level=settings.LOG_LEVEL)
 
 
 @app.on_event("startup")
@@ -243,9 +240,12 @@ async def proxy(request: Request, path: str):
     forward_headers.pop("host", None)  # remove original host
 
     if user_id:
+        request.state.authenticated_user_id = user_id
         forward_headers["X-User-Id"] = user_id
         forward_headers["X-User-Role"] = user_role or ""
         forward_headers["X-User-Email"] = user_email or ""
+
+    forward_headers["X-Request-Id"] = getattr(request.state, "request_id", request.headers.get("X-Request-Id", ""))
 
     forward_headers["X-Forwarded-For"] = request.client.host if request.client else "unknown"
     forward_headers["X-Gateway"] = "promptuario-gateway/1.0"
