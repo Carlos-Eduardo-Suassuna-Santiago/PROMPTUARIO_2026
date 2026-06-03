@@ -9,6 +9,7 @@ import csv
 import io
 import json
 import logging
+import os
 import uuid
 from datetime import datetime, timezone
 
@@ -17,8 +18,12 @@ from botocore.exceptions import ClientError
 from celery import Celery
 
 from app.config import settings
+from shared.observability import setup_worker_observability, start_worker_metrics_server, worker_job_duration
 
 logger = logging.getLogger(__name__)
+
+setup_worker_observability(service_name=f"{settings.SERVICE_NAME}-worker", log_level=settings.LOG_LEVEL)
+start_worker_metrics_server(int(os.getenv("METRICS_PORT", "8000")))
 
 celery_app = Celery(
     "reporting",
@@ -70,61 +75,62 @@ def generate_report(self, job_id: str) -> dict:
     engine = _get_sync_engine()
     logger.info("Generating report job: %s", job_id)
 
-    with Session(engine) as session:
+    with worker_job_duration(service=f"{settings.SERVICE_NAME}-worker", job_type="generate_report"):
+        with Session(engine) as session:
         # Load job
-        job_row = session.execute(
-            text("SELECT * FROM report_jobs WHERE id = :id"), {"id": job_id}
-        ).fetchone()
+            job_row = session.execute(
+                text("SELECT * FROM report_jobs WHERE id = :id"), {"id": job_id}
+            ).fetchone()
 
-        if not job_row:
-            logger.error("Report job not found: %s", job_id)
-            return {"error": "Job not found"}
+            if not job_row:
+                logger.error("Report job not found: %s", job_id)
+                return {"error": "Job not found"}
 
-        # Update status to RUNNING
-        session.execute(
-            text("UPDATE report_jobs SET status='RUNNING' WHERE id=:id"), {"id": job_id}
-        )
-        session.commit()
-
-        try:
-            params = job_row.parameters or {}
-            report_type = job_row.report_type
-            output_format = job_row.output_format
-
-            data = _generate_data(session, report_type, params)
-            s3_key = None
-            row_count = len(data) if isinstance(data, list) else 1
-
-            if output_format in ("CSV", "PDF"):
-                s3_key = _upload_report(job_id, data, output_format, report_type)
-
+            # Update status to RUNNING
             session.execute(
-                text("""
-                    UPDATE report_jobs
-                    SET status='COMPLETED', result_data=:data, s3_key=:s3_key,
-                        row_count=:count, completed_at=:now
-                    WHERE id=:id
-                """),
-                {
-                    "data": json.dumps(data) if output_format == "JSON" else None,
-                    "s3_key": s3_key,
-                    "count": row_count,
-                    "now": datetime.now(timezone.utc).isoformat(),
-                    "id": job_id,
-                },
+                text("UPDATE report_jobs SET status='RUNNING' WHERE id=:id"), {"id": job_id}
             )
             session.commit()
-            logger.info("Report job completed: %s (%d rows)", job_id, row_count)
-            return {"job_id": job_id, "status": "COMPLETED", "rows": row_count}
 
-        except Exception as e:
-            logger.error("Report generation failed for %s: %s", job_id, e)
-            session.execute(
-                text("UPDATE report_jobs SET status='FAILED', error_message=:err WHERE id=:id"),
-                {"err": str(e), "id": job_id},
-            )
-            session.commit()
-            raise self.retry(exc=e, countdown=60)
+            try:
+                params = job_row.parameters or {}
+                report_type = job_row.report_type
+                output_format = job_row.output_format
+
+                data = _generate_data(session, report_type, params)
+                s3_key = None
+                row_count = len(data) if isinstance(data, list) else 1
+
+                if output_format in ("CSV", "PDF"):
+                    s3_key = _upload_report(job_id, data, output_format, report_type)
+
+                session.execute(
+                    text("""
+                        UPDATE report_jobs
+                        SET status='COMPLETED', result_data=:data, s3_key=:s3_key,
+                            row_count=:count, completed_at=:now
+                        WHERE id=:id
+                    """),
+                    {
+                        "data": json.dumps(data) if output_format == "JSON" else None,
+                        "s3_key": s3_key,
+                        "count": row_count,
+                        "now": datetime.now(timezone.utc).isoformat(),
+                        "id": job_id,
+                    },
+                )
+                session.commit()
+                logger.info("Report job completed: %s (%d rows)", job_id, row_count)
+                return {"job_id": job_id, "status": "COMPLETED", "rows": row_count}
+
+            except Exception as e:
+                logger.error("Report generation failed for %s: %s", job_id, e)
+                session.execute(
+                    text("UPDATE report_jobs SET status='FAILED', error_message=:err WHERE id=:id"),
+                    {"err": str(e), "id": job_id},
+                )
+                session.commit()
+                raise self.retry(exc=e, countdown=60)
 
 
 def _generate_data(session, report_type: str, params: dict) -> list[dict]:

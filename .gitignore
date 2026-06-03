@@ -83,3 +83,6 @@ pnpm-debug.log*
 # Database
 *.sqlite3
 *.db
+
+BACKLOG_BACKEND_PRIORIZADO.md
+IMPLEMENTATION_PROMPTS.md

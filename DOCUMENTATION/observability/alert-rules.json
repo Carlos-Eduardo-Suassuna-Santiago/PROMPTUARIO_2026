@@ -1,0 +1,19 @@
+{
+  "alerts": [
+    {
+      "name": "service_down",
+      "expr": "up == 0",
+      "for": "2m"
+    },
+    {
+      "name": "error_rate_gt_5_percent",
+      "expr": "sum(rate(http_requests_total{status=~\"5..\"}[5m])) by (service) / clamp_min(sum(rate(http_requests_total[5m])) by (service), 0.001) > 0.05",
+      "for": "5m"
+    },
+    {
+      "name": "rabbitmq_queue_backlog",
+      "expr": "max_over_time(rabbitmq_queue_length[5m]) > 100",
+      "for": "5m"
+    }
+  ]
+}

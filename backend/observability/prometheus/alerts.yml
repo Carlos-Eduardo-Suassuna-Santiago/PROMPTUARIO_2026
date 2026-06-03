@@ -1,0 +1,33 @@
+groups:
+  - name: promptuario-observability
+    rules:
+      - alert: ServiceDown
+        expr: up == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Service is down"
+          description: "{{ $labels.job }} has not been scraped for 2 minutes."
+
+      - alert: HighErrorRate
+        expr: |
+          sum(rate(http_requests_total{status=~"5.."}[5m])) by (service)
+          /
+          clamp_min(sum(rate(http_requests_total[5m])) by (service), 0.001)
+          > 0.05
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High HTTP error rate"
+          description: "{{ $labels.service }} has error_rate > 5% in the last 5 minutes."
+
+      - alert: RabbitMQQueueBacklog
+        expr: max_over_time(rabbitmq_queue_length[5m]) > 100
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "RabbitMQ queue backlog"
+          description: "Queue {{ $labels.queue }} in {{ $labels.service }} is above threshold."

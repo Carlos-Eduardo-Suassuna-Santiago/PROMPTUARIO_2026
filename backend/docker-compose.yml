@@ -108,6 +108,27 @@ services:
       - "5672:5672"
       - "15672:15672"
 
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.105.0
+    command: ["--config=/etc/otelcol/config.yml"]
+    volumes:
+      - ./observability/otel-collector-config.yml:/etc/otelcol/config.yml:ro
+    depends_on:
+      - jaeger
+    networks: [backend]
+    ports:
+      - "4317:4317"
+      - "4318:4318"
+
+  jaeger:
+    image: jaegertracing/all-in-one:1.58
+    environment:
+      COLLECTOR_OTLP_ENABLED: "true"
+    networks: [backend]
+    ports:
+      - "16686:16686"
+      - "14250:14250"
+
   minio:
     image: minio/minio:latest
     command: server /data --console-address ":9001"
@@ -126,6 +147,31 @@ services:
       - "9000:9000"
       - "9001:9001"
 
+  prometheus:
+    image: prom/prometheus:v2.54.1
+    volumes:
+      - ./observability/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./observability/prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
+    networks: [backend]
+    ports:
+      - "9090:9090"
+
+  grafana:
+    image: grafana/grafana:11.2.2
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+    volumes:
+      - ./observability/grafana/provisioning/datasources:/etc/grafana/provisioning/datasources:ro
+      - ./observability/grafana/provisioning/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./observability/grafana/dashboards:/etc/grafana/provisioning/dashboards/json:ro
+      - grafana_data:/var/lib/grafana
+    depends_on:
+      - prometheus
+    networks: [backend]
+    ports:
+      - "3000:3000"
+
   # ─── MICROSERVICES ────────────────────────────────────────────
   iam-service:
     build:
@@ -141,6 +187,8 @@ services:
       REFRESH_TOKEN_EXPIRE_DAYS: 7
       SERVICE_NAME: iam-service
       LOG_LEVEL: INFO
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+      JAEGER_AGENT_HOST: jaeger
     depends_on:
       db-iam:
         condition: service_healthy
@@ -148,6 +196,8 @@ services:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
+      otel-collector:
+        condition: service_started
     networks: [backend]
     ports:
       - "8001:8000"
@@ -163,11 +213,15 @@ services:
       JWT_ALGORITHM: HS256
       SERVICE_NAME: patient-service
       LOG_LEVEL: INFO
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+      JAEGER_AGENT_HOST: jaeger
     depends_on:
       db-patient:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
+      otel-collector:
+        condition: service_started
     networks: [backend]
     ports:
       - "8002:8000"
@@ -187,6 +241,8 @@ services:
       S3_BUCKET_PRESCRIPTIONS: prescriptions
       SERVICE_NAME: clinical-service
       LOG_LEVEL: INFO
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+      JAEGER_AGENT_HOST: jaeger
     depends_on:
       db-clinical:
         condition: service_healthy
@@ -194,6 +250,8 @@ services:
         condition: service_healthy
       minio:
         condition: service_healthy
+      otel-collector:
+        condition: service_started
     networks: [backend]
     ports:
       - "8003:8000"
@@ -212,11 +270,15 @@ services:
       LLM_MODEL: gpt-4o-mini
       SERVICE_NAME: ai-service
       LOG_LEVEL: INFO
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+      JAEGER_AGENT_HOST: jaeger
     depends_on:
       db-ai:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
+      otel-collector:
+        condition: service_started
     networks: [backend]
     ports:
       - "8004:8000"
@@ -238,6 +300,8 @@ services:
       S3_BUCKET_REPORTS: reports
       SERVICE_NAME: reporting-service
       LOG_LEVEL: INFO
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+      JAEGER_AGENT_HOST: jaeger
     depends_on:
       db-reporting:
         condition: service_healthy
@@ -245,6 +309,8 @@ services:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
+      otel-collector:
+        condition: service_started
     networks: [backend]
     ports:
       - "8005:8000"
@@ -262,8 +328,14 @@ services:
       S3_ACCESS_KEY: promptuario
       S3_SECRET_KEY: promptuario_pass
       S3_BUCKET_REPORTS: reports
+      SERVICE_NAME: reporting-service
+      LOG_LEVEL: INFO
+      METRICS_PORT: 8000
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+      JAEGER_AGENT_HOST: jaeger
     depends_on:
       - reporting-service
+      - otel-collector
     networks: [backend]
 
   # ─── API GATEWAY ──────────────────────────────────────────────
@@ -281,12 +353,16 @@ services:
       JWT_ALGORITHM: HS256
       REDIS_URL: redis://redis:6379/0
       LOG_LEVEL: INFO
+      SERVICE_NAME: gateway
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+      JAEGER_AGENT_HOST: jaeger
     depends_on:
       - iam-service
       - patient-service
       - clinical-service
       - ai-service
       - reporting-service
+      - otel-collector
     networks: [backend]
     ports:
       - "8000:8000"
@@ -304,3 +380,4 @@ volumes:
   redis_data:
   rabbitmq_data:
   minio_data:
+  grafana_data:
