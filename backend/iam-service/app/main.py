@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import sys
 
 import redis.asyncio as aioredis
 from fastapi import FastAPI
@@ -12,9 +13,13 @@ from app.config import settings
 from app.domain.models.user import User
 from shared.events.broker import EventPublisher
 from shared.models.database import Base, build_engine, build_session_factory
-from shared.observability import setup_observability
 from shared.utils.security import hash_password
 
+logging.basicConfig(
+    level=getattr(logging, settings.LOG_LEVEL),
+    format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
+    stream=sys.stdout,
+)
 logger = logging.getLogger(__name__)
 
 app = FastAPI(
@@ -32,8 +37,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-setup_observability(app, service_name=settings.SERVICE_NAME, log_level=settings.LOG_LEVEL)
 
 app.include_router(auth_router, prefix="/api/v1")
 app.include_router(users_router, prefix="/api/v1")

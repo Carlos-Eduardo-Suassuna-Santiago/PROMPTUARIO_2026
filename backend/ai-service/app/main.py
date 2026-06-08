@@ -16,7 +16,6 @@ from app.domain.services.ai_service import AIService
 from shared.events import MedicalRecordCreatedEvent, PrescriptionGeneratedEvent
 from shared.events.broker import EventConsumer, EventPublisher
 from shared.middleware.auth import make_auth_dependency
-from shared.observability import setup_observability
 
 logger = logging.getLogger(__name__)
 
@@ -92,8 +91,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-setup_observability(app, service_name=settings.SERVICE_NAME, log_level=settings.LOG_LEVEL)
 
 app.include_router(router, prefix="/api/v1")
 

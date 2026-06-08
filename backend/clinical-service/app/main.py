@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import sys
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -14,8 +15,12 @@ from app.domain.models.clinical import (
 from app.infrastructure.events.consumers import setup_consumers
 from shared.events.broker import EventConsumer, EventPublisher
 from shared.models.database import Base, build_engine, build_session_factory
-from shared.observability import setup_observability
 
+logging.basicConfig(
+    level=getattr(logging, settings.LOG_LEVEL),
+    format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
+    stream=sys.stdout,
+)
 logger = logging.getLogger(__name__)
 
 app = FastAPI(
@@ -31,8 +36,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-setup_observability(app, service_name=settings.SERVICE_NAME, log_level=settings.LOG_LEVEL)
 
 app.include_router(appointments_router, prefix="/api/v1")
 app.include_router(records_router, prefix="/api/v1")

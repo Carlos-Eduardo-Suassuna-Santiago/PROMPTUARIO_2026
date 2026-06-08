@@ -12,23 +12,19 @@ from sqlalchemy.ext.asyncio import (
 )
 from sqlalchemy.orm import DeclarativeBase
 
-from shared.observability import instrument_sqlalchemy_engine
-
 
 class Base(DeclarativeBase):
     pass
 
 
 def build_engine(database_url: str):
-    engine = create_async_engine(
+    return create_async_engine(
         database_url,
         echo=False,
         pool_pre_ping=True,
         pool_size=10,
         max_overflow=20,
     )
-    instrument_sqlalchemy_engine(engine)
-    return engine
 
 
 def build_session_factory(engine) -> async_sessionmaker[AsyncSession]:

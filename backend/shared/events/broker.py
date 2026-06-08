@@ -11,14 +11,8 @@ from typing import Callable, Awaitable, Type
 import aio_pika
 from aio_pika import ExchangeType, Message, DeliveryMode
 from aio_pika.abc import AbstractRobustConnection
-from opentelemetry import trace
 
 from shared.events import DomainEvent, EXCHANGES
-from shared.observability import (
-    build_message_headers,
-    set_rabbitmq_queue_length,
-    start_consumer_span,
-)
 
 logger = logging.getLogger(__name__)
 
@@ -30,7 +24,6 @@ class EventPublisher:
         self._url = url
         self._connection: AbstractRobustConnection | None = None
         self._channel = None
-        self._tracer = trace.get_tracer("shared.events.publisher")
 
     async def connect(self) -> None:
         backoff = 1.0
@@ -57,16 +50,14 @@ class EventPublisher:
             raise RuntimeError("Publisher not connected")
         exchange_name = getattr(event, "EXCHANGE", "promptuario.iam")
         routing_key = getattr(event, "ROUTING_KEY", "event.generic")
-        with self._tracer.start_as_current_span(f"rabbitmq.publish {routing_key}"):
-            exchange = await self._channel.get_exchange(exchange_name)
-            message = Message(
-                body=event.to_json(),
-                content_type="application/json",
-                delivery_mode=DeliveryMode.PERSISTENT,
-                message_id=event.event_id,
-                headers=build_message_headers(),
-            )
-            await exchange.publish(message, routing_key=routing_key)
+        exchange = await self._channel.get_exchange(exchange_name)
+        message = Message(
+            body=event.to_json(),
+            content_type="application/json",
+            delivery_mode=DeliveryMode.PERSISTENT,
+            message_id=event.event_id,
+        )
+        await exchange.publish(message, routing_key=routing_key)
         logger.debug("Published %s → %s/%s", event.event_type, exchange_name, routing_key)
 
     async def close(self) -> None:
@@ -129,27 +120,18 @@ class EventConsumer:
             )
             exchange = await self._channel.get_exchange(exchange_name)
             await queue.bind(exchange, routing_key=routing_key)
-            set_rabbitmq_queue_length(self._service_name, queue_name, queue.declaration_result.message_count)
 
-            async def _make_callback(h: Callable, rk: str, qn: str):
+            async def _make_callback(h: Callable):
                 async def callback(message: aio_pika.IncomingMessage):
-                    with start_consumer_span(self._service_name, rk, message.headers):
-                        async with message.process(requeue=True):
-                            try:
-                                await h(message.body)
-                            except Exception as e:
-                                logger.error("Handler error for %s: %s", rk, e)
-                                raise
-                            finally:
-                                queue_state = await self._channel.declare_queue(qn, passive=True)
-                                set_rabbitmq_queue_length(
-                                    self._service_name,
-                                    qn,
-                                    queue_state.declaration_result.message_count,
-                                )
+                    async with message.process(requeue=True):
+                        try:
+                            await h(message.body)
+                        except Exception as e:
+                            logger.error("Handler error for %s: %s", routing_key, e)
+                            raise
                 return callback
 
-            await queue.consume(await _make_callback(handler, routing_key, queue_name))
+            await queue.consume(await _make_callback(handler))
             logger.info("Subscribed: %s → %s", queue_name, routing_key)
 
     async def close(self) -> None:

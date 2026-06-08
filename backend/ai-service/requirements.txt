@@ -9,10 +9,3 @@ bcrypt==4.0.1
 aio-pika==9.4.3
 redis[asyncio]==5.2.0
 httpx==0.28.0
-python-json-logger==2.0.7
-prometheus-client==0.21.1
-opentelemetry-sdk==1.30.0
-opentelemetry-exporter-otlp==1.30.0
-opentelemetry-exporter-jaeger==1.21.0
-opentelemetry-instrumentation-fastapi==0.51b0
-opentelemetry-instrumentation-httpx==0.51b0
