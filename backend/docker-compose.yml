@@ -141,6 +141,7 @@ services:
       REFRESH_TOKEN_EXPIRE_DAYS: 7
       SERVICE_NAME: iam-service
       LOG_LEVEL: INFO
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
     depends_on:
       db-iam:
         condition: service_healthy
@@ -163,6 +164,7 @@ services:
       JWT_ALGORITHM: HS256
       SERVICE_NAME: patient-service
       LOG_LEVEL: INFO
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
     depends_on:
       db-patient:
         condition: service_healthy
@@ -187,6 +189,7 @@ services:
       S3_BUCKET_PRESCRIPTIONS: prescriptions
       SERVICE_NAME: clinical-service
       LOG_LEVEL: INFO
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
     depends_on:
       db-clinical:
         condition: service_healthy
@@ -212,6 +215,7 @@ services:
       LLM_MODEL: gpt-4o-mini
       SERVICE_NAME: ai-service
       LOG_LEVEL: INFO
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
     depends_on:
       db-ai:
         condition: service_healthy
@@ -238,6 +242,7 @@ services:
       S3_BUCKET_REPORTS: reports
       SERVICE_NAME: reporting-service
       LOG_LEVEL: INFO
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
     depends_on:
       db-reporting:
         condition: service_healthy
@@ -281,6 +286,7 @@ services:
       JWT_ALGORITHM: HS256
       REDIS_URL: redis://redis:6379/0
       LOG_LEVEL: INFO
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
     depends_on:
       - iam-service
       - patient-service
@@ -290,6 +296,56 @@ services:
     networks: [backend]
     ports:
       - "8000:8000"
+
+  prometheus:
+    image: prom/prometheus:v2.54.1
+    volumes:
+      - ./observability/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./observability/prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.retention.time=30d"
+    ports:
+      - "9090:9090"
+    networks: [backend]
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:11.2.2
+    volumes:
+      - ./observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - grafana_data:/var/lib/grafana
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    ports:
+      - "3001:3000"
+    depends_on: [prometheus]
+    networks: [backend]
+    restart: unless-stopped
+
+  jaeger:
+    image: jaegertracing/all-in-one:1.58
+    environment:
+      COLLECTOR_OTLP_ENABLED: "true"
+    ports:
+      - "16686:16686"
+      - "14250:14250"
+    networks: [backend]
+    restart: unless-stopped
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.105.0
+    volumes:
+      - ./observability/otel-collector-config.yml:/etc/otelcol-contrib/config.yaml:ro
+    ports:
+      - "4317:4317"
+      - "4318:4318"
+    depends_on: [jaeger]
+    networks: [backend]
+    restart: unless-stopped
 
 networks:
   backend:
@@ -304,3 +360,5 @@ volumes:
   redis_data:
   rabbitmq_data:
   minio_data:
+  prometheus_data:
+  grafana_data:
