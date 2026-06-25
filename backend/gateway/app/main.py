@@ -10,7 +10,6 @@ PROMPTUARIO API Gateway
 from __future__ import annotations
 
 import logging
-import sys
 import time
 from typing import Any
 
@@ -22,6 +21,7 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from shared.utils.security import decode_token
+from shared.observability import setup_observability
 
 # ─── Settings ────────────────────────────────────────────────────────────────
 
@@ -49,17 +49,14 @@ class Settings(BaseSettings):
 
 settings = Settings()
 
-logging.basicConfig(
-    level=getattr(logging, settings.LOG_LEVEL),
-    format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
-    stream=sys.stdout,
-)
 logger = logging.getLogger(__name__)
 
 # ─── Route table ─────────────────────────────────────────────────────────────
 # Maps path prefix → (service_url, requires_auth)
 
 ROUTE_TABLE: list[tuple[str, str, bool]] = [
+    # Observability — public (gateway /metrics served locally via setup_observability)
+    ("/metrics",             settings.IAM_SERVICE_URL,       False),
     # Auth routes — public
     ("/api/v1/auth/login",   settings.IAM_SERVICE_URL,       False),
     ("/api/v1/auth/refresh", settings.IAM_SERVICE_URL,       False),
@@ -91,6 +88,8 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+setup_observability(app, settings.SERVICE_NAME, settings.LOG_LEVEL)
 
 
 @app.on_event("startup")
