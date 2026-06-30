@@ -84,5 +84,5 @@ pnpm-debug.log*
 *.sqlite3
 *.db
 
-BACKLOG_BACKEND_PRIORIZADO.md
-IMPLEMENTATION_PROMPTS.md
+PROMPTUARIO_Status_Implementacao.md
+PROMPTUARIO_Prompts_Final_Developer.md
