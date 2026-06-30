@@ -5,7 +5,7 @@ import { z } from 'zod'
 import { Calendar, Plus, X, CheckCircle, Clock, Search } from 'lucide-react'
 import {
   useAppointments, useCreateAppointment, useCancelAppointment,
-  usePatients, useUsers,
+  usePatients, useDoctors,
 } from '@/hooks'
 import { PageHeader } from '@/components/layout/AppShell'
 import {
@@ -14,12 +14,12 @@ import {
   Alert, Spinner,
 } from '@/components/ui'
 import { formatDateTime, STATUS_LABELS, STATUS_COLORS, getErrorMessage, cn } from '@/utils'
-import { useAuthStore, useIsAdmin, useIsAttendant, useIsDoctor, useIsPatient } from '@/store/auth.store'
+import { useAuthStore, useIsPatient } from '@/store/auth.store'
 import type { Appointment } from '@/types'
 
 // ─── Create Appointment Modal ─────────────────────────────────────────────
 const apptSchema = z.object({
-  patient_id: z.string().min(1, 'Selecione o paciente'),
+  patient_id: z.string().optional(),
   doctor_id: z.string().min(1, 'Selecione o médico'),
   scheduled_at: z.string().min(1, 'Data obrigatória'),
   appointment_type: z.enum(['CONSULTATION', 'RETURN', 'EXAM', 'URGENT']),
@@ -39,7 +39,8 @@ function CreateAppointmentModal({ open, onClose }: { open: boolean; onClose: () 
   const [error, setError] = useState<string | null>(null)
   const createAppt = useCreateAppointment()
   const { data: patients } = usePatients({ size: 100 })
-  const { data: doctors } = useUsers({ role: 'DOCTOR', is_active: true, size: 100 })
+  const { data: doctors } = useDoctors()
+  const isPatient = useIsPatient()
 
   const { register, handleSubmit, reset, formState: { errors } } = useForm<ApptForm>({
     resolver: zodResolver(apptSchema),
@@ -49,10 +50,11 @@ function CreateAppointmentModal({ open, onClose }: { open: boolean; onClose: () 
   const onSubmit = async (data: ApptForm) => {
     setError(null)
     try {
-      await createAppt.mutateAsync({
-        ...data,
-        scheduled_at: new Date(data.scheduled_at).toISOString(),
-      })
+      // Remove patient_id for patients — backend auto-assigns it
+      const payload = isPatient
+        ? { doctor_id: data.doctor_id, scheduled_at: new Date(data.scheduled_at).toISOString(), appointment_type: data.appointment_type, specialty: data.specialty, notes: data.notes }
+        : { ...data, scheduled_at: new Date(data.scheduled_at).toISOString() }
+      await createAppt.mutateAsync(payload)
       reset()
       onClose()
     } catch (err) {
@@ -77,13 +79,15 @@ function CreateAppointmentModal({ open, onClose }: { open: boolean; onClose: () 
     >
       {error && <Alert variant="error" className="mb-4">{error}</Alert>}
       <div className="space-y-4">
-        <Select
-          label="Paciente *"
-          options={patientOptions}
-          placeholder="Selecione o paciente"
-          error={errors.patient_id?.message}
-          {...register('patient_id')}
-        />
+        {!isPatient && (
+          <Select
+            label="Paciente *"
+            options={patientOptions}
+            placeholder="Selecione o paciente"
+            error={errors.patient_id?.message}
+            {...register('patient_id')}
+          />
+        )}
         <Select
           label="Médico *"
           options={doctorOptions}

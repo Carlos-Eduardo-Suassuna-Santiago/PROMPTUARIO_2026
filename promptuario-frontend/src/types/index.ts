@@ -158,7 +158,7 @@ export interface Appointment {
 }
 
 export interface AppointmentCreate {
-  patient_id: string
+  patient_id?: string  // Auto-atribuído pelo backend quando perfil for PATIENT
   doctor_id: string
   scheduled_at: string
   appointment_type: AppointmentType

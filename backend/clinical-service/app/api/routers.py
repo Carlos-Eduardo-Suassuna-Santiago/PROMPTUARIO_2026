@@ -77,6 +77,16 @@ async def list_appointments(
     dependencies=[Depends(require_roles("ADMIN", "ATTENDANT", "PATIENT"))],
 )
 async def create_appointment(body: AppointmentCreate, request: Request, user=Depends(get_current_user)):
+    # Auto-atribuir patient_id para pacientes logados
+    if user.role == "PATIENT":
+        body.patient_id = user.sub
+    if not body.patient_id:
+        from fastapi import HTTPException as _HTTPException
+        from fastapi import status as _status
+        raise _HTTPException(
+            status_code=_status.HTTP_400_BAD_REQUEST,
+            detail="patient_id é obrigatório para não-pacientes",
+        )
     async with _sf(request)() as session:
         svc = AppointmentService(session, _pub(request))
         result = await svc.create(body, user.sub)

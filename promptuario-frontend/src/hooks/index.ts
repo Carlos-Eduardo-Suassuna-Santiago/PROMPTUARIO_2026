@@ -68,6 +68,13 @@ export function useCreateUser() {
   })
 }
 
+export function useDoctors() {
+  return useQuery({
+    queryKey: ['users', 'doctors'],
+    queryFn: () => usersApi.listDoctors(),
+  })
+}
+
 export function useDeactivateUser() {
   const qc = useQueryClient()
   return useMutation({

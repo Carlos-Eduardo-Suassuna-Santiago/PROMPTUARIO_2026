@@ -43,6 +43,10 @@ export const usersApi = {
 
   deactivate: (id: string, reason: string) =>
     api.delete(`/users/${id}`, { data: { reason } }),
+
+  // Doctors listing — accessible for patients
+  listDoctors: () =>
+    api.get<{ items: User[]; total: number }>('/users/doctors').then(r => r.data),
 }
 
 // ─── Patients ───────────────────────────────────────────────────────────────
