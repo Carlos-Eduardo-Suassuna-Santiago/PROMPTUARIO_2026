@@ -297,6 +297,34 @@ services:
     ports:
       - "8000:8000"
 
+  # ─── EXPORTERS ──────────────────────────────────────────────
+  # RabbitMQ natively exposes Prometheus metrics on port 15692
+  # (enabled via management plugin). Scraped directly in prometheus.yml.
+  # No separate exporter image needed.
+  #
+  # Optional exporters (uncomment if you want DB metrics):
+  # postgres-exporter:
+  #   image: quay.io/prometheuscommunity/postgres-exporter:v0.15.0
+  #   environment:
+  #     DATA_SOURCE_NAME: "postgresql://iam:iam_pass@db-iam:5432/iam_db?sslmode=disable"
+  #     PG_EXPORTER_AUTO_DISCOVER_DATABASES: "true"
+  #   ports: ["9187:9187"]
+  #   depends_on: [db-iam]
+  #   networks: [backend]
+  #   restart: unless-stopped
+  #
+  # mongodb-exporter:
+  #   image: percona/mongodb_exporter:0.44
+  #   command:
+  #     - "--mongodb.uri=mongodb://ai:ai_pass@db-ai:27017"
+  #     - "--collect-all"
+  #     - "--compatible-mode"
+  #   ports: ["9216:9216"]
+  #   depends_on: [db-ai]
+  #   networks: [backend]
+  #   restart: unless-stopped
+
+  # ─── PROMETHEUS ──────────────────────────────────────────────
   prometheus:
     image: prom/prometheus:v2.54.1
     volumes:

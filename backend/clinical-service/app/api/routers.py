@@ -19,7 +19,11 @@ from app.domain.services.clinical_service import (
     AppointmentService, ExamRequestService,
     MedicalRecordService, PrescriptionService,
 )
+from shared.metrics import (
+    consultations_total, prescriptions_total, medical_records_total, exam_requests_total,
+)
 from shared.middleware.auth import make_auth_dependency
+from app.config import settings as _settings
 
 get_current_user, require_roles = make_auth_dependency(
     settings.JWT_SECRET_KEY, settings.JWT_ALGORITHM
@@ -75,7 +79,9 @@ async def list_appointments(
 async def create_appointment(body: AppointmentCreate, request: Request, user=Depends(get_current_user)):
     async with _sf(request)() as session:
         svc = AppointmentService(session, _pub(request))
-        return AppointmentResponse.model_validate(await svc.create(body, user.sub))
+        result = await svc.create(body, user.sub)
+        consultations_total.labels(service=_settings.SERVICE_NAME, status="scheduled").inc()
+        return AppointmentResponse.model_validate(result)
 
 
 @appointments_router.get("/{appointment_id}", response_model=AppointmentResponse)
@@ -94,9 +100,9 @@ async def cancel_appointment(
 ):
     async with _sf(request)() as session:
         svc = AppointmentService(session, _pub(request))
-        return AppointmentResponse.model_validate(
-            await svc.cancel(appointment_id, body, user.sub, user.role)
-        )
+        result = await svc.cancel(appointment_id, body, user.sub, user.role)
+        consultations_total.labels(service=_settings.SERVICE_NAME, status="cancelled").inc()
+        return AppointmentResponse.model_validate(result)
 
 
 @appointments_router.put(
@@ -107,7 +113,9 @@ async def cancel_appointment(
 async def complete_appointment(appointment_id: str, request: Request, user=Depends(get_current_user)):
     async with _sf(request)() as session:
         svc = AppointmentService(session, _pub(request))
-        return AppointmentResponse.model_validate(await svc.complete(appointment_id))
+        result = await svc.complete(appointment_id)
+        consultations_total.labels(service=_settings.SERVICE_NAME, status="completed").inc()
+        return AppointmentResponse.model_validate(result)
 
 
 # ─── Medical Records ──────────────────────────────────────────────────────────
@@ -122,6 +130,7 @@ async def create_record(body: MedicalRecordCreate, request: Request, user=Depend
     async with _sf(request)() as session:
         svc = MedicalRecordService(session, _pub(request))
         record = await svc.create(body, user.sub)
+        medical_records_total.labels(service=_settings.SERVICE_NAME).inc()
         record = await svc.repo.get(record.id, load_relations=True)
         return MedicalRecordResponse.model_validate(record)
 
@@ -173,7 +182,9 @@ async def list_patient_records(
 async def create_prescription(record_id: str, body: PrescriptionCreate, request: Request, user=Depends(get_current_user)):
     async with _sf(request)() as session:
         svc = PrescriptionService(session, _pub(request))
-        return PrescriptionResponse.model_validate(await svc.create(record_id, body, user.sub))
+        result = await svc.create(record_id, body, user.sub)
+        prescriptions_total.labels(service=_settings.SERVICE_NAME).inc()
+        return PrescriptionResponse.model_validate(result)
 
 
 # ─── Exam Requests ────────────────────────────────────────────────────────────
@@ -187,7 +198,9 @@ async def create_prescription(record_id: str, body: PrescriptionCreate, request:
 async def create_exam(record_id: str, body: ExamRequestCreate, request: Request, user=Depends(get_current_user)):
     async with _sf(request)() as session:
         svc = ExamRequestService(session)
-        return ExamRequestResponse.model_validate(await svc.create(record_id, body, user.sub))
+        result = await svc.create(record_id, body, user.sub)
+        exam_requests_total.labels(service=_settings.SERVICE_NAME, status="requested").inc()
+        return ExamRequestResponse.model_validate(result)
 
 
 @records_router.put(
@@ -201,6 +214,6 @@ async def record_exam_result(
 ):
     async with _sf(request)() as session:
         svc = ExamRequestService(session)
-        return ExamRequestResponse.model_validate(
-            await svc.record_result(record_id, exam_id, body, user.sub)
-        )
+        result = await svc.record_result(record_id, exam_id, body, user.sub)
+        exam_requests_total.labels(service=_settings.SERVICE_NAME, status="completed").inc()
+        return ExamRequestResponse.model_validate(result)

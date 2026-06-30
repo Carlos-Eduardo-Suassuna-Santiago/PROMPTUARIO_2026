@@ -28,7 +28,9 @@ from shared.events import (
 from shared.events.broker import EventConsumer, EventPublisher
 from shared.middleware.auth import make_auth_dependency
 from shared.models.database import Base, build_engine, build_session_factory
+from shared.metrics import reports_generated_total, reports_errors_total
 from shared.observability import setup_observability
+from app.config import settings as _settings
 
 logger = logging.getLogger(__name__)
 
@@ -83,6 +85,12 @@ async def request_report(body: ReportRequest, request: Request, user=Depends(get
         )
         session.add(job)
         await session.commit()
+
+    reports_generated_total.labels(
+        service=_settings.SERVICE_NAME,
+        report_type=body.report_type,
+        output_format=body.output_format,
+    ).inc()
 
     # Dispatch to Celery worker
     celery_app.send_task("reporting.generate_report", args=[job.id])

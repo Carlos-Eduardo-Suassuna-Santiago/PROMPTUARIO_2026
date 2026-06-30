@@ -1,6 +1,7 @@
 groups:
   - name: promptuario
     rules:
+      # ─── Availability ──────────────────────────────────────────
       - alert: ServiceDown
         expr: up == 0
         for: 1m
@@ -8,7 +9,18 @@ groups:
           severity: critical
         annotations:
           summary: "Serviço {{ $labels.job }} está down"
+          description: "O serviço {{ $labels.job }} está inacessível há mais de 1 minuto."
 
+      - alert: NoHeartbeat
+        expr: time() - process_start_time_seconds{job=~".+"} > 300
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Serviço {{ $labels.job }} sem heartbeat"
+          description: "O processo {{ $labels.job }} não reporta heartbeat há mais de 5 minutos."
+
+      # ─── HTTP Errors ──────────────────────────────────────────
       - alert: HighErrorRate
         expr: |
           rate(http_requests_total{status_code=~"5.."}[5m]) /
@@ -17,8 +29,21 @@ groups:
         labels:
           severity: warning
         annotations:
-          summary: "Taxa de erro > 5% em {{ $labels.service }}"
+          summary: "Taxa de erro 5xx > 5% em {{ $labels.service }}"
+          description: "O serviço {{ $labels.service }} está com {{ $value | humanizePercentage }} de erros 5xx nos últimos 5 minutos."
 
+      - alert: High4xxRate
+        expr: |
+          rate(http_requests_4xx_total[5m]) /
+          rate(http_requests_total[5m]) > 0.10
+        for: 3m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Taxa de erro 4xx > 10% em {{ $labels.service }}"
+          description: "O serviço {{ $labels.service }} está com {{ $value | humanizePercentage }} de erros 4xx nos últimos 5 minutos."
+
+      # ─── Latency ──────────────────────────────────────────────
       - alert: HighLatency
         expr: |
           histogram_quantile(0.95, rate(http_request_duration_seconds_bucket[5m])) > 2
@@ -27,3 +52,90 @@ groups:
           severity: warning
         annotations:
           summary: "P95 latência > 2s em {{ $labels.service }}"
+          description: "A latência P95 do serviço {{ $labels.service }} está em {{ $value }}s."
+
+      - alert: HighLatencyDegradation
+        expr: |
+          histogram_quantile(0.95, rate(http_request_duration_seconds_bucket[5m])) > 1.5
+        for: 10m
+        labels:
+          severity: info
+        annotations:
+          summary: "P95 latência > 1.5s em {{ $labels.service }}"
+          description: "A latência P95 do serviço {{ $labels.service }} está em {{ $value }}s por mais de 10 minutos."
+
+      # ─── RabbitMQ ─────────────────────────────────────────────
+      - alert: QueueDepthIncreasing
+        expr: rabbitmq_queue_messages_ready > 1000
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Fila RabbitMQ com acúmulo > 1000 mensagens"
+          description: "A fila {{ $labels.queue }} do RabbitMQ tem {{ $value }} mensagens prontas há mais de 5 minutos."
+
+      - alert: QueueDepthCritical
+        expr: rabbitmq_queue_messages_ready > 5000
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Fila RabbitMQ com acúmulo crítico > 5000 mensagens"
+          description: "A fila {{ $labels.queue }} do RabbitMQ tem {{ $value }} mensagens prontas!"
+
+      - alert: UnackedMessages
+        expr: rabbitmq_queue_messages_unacked > 500
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Mensagens não processadas > 500"
+          description: "Há {{ $value }} mensagens não processadas na fila {{ $labels.queue }}."
+
+      # ─── PostgreSQL ───────────────────────────────────────────
+      - alert: PostgresConnectionsHigh
+        expr: pg_stat_activity_count > 50
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Conexões PostgreSQL altas > 50"
+          description: "O banco {{ $labels.datname }} tem {{ $value }} conexões ativas."
+
+      - alert: PostgresDeadlocks
+        expr: rate(pg_stat_database_deadlocks[5m]) > 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Deadlocks detectados no PostgreSQL"
+          description: "Deadlocks ocorrendo no banco {{ $labels.datname }}."
+
+      # ─── MongoDB ──────────────────────────────────────────────
+      - alert: MongoConnectionsHigh
+        expr: mongodb_connections > 100
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Conexões MongoDB altas > 100"
+          description: "O MongoDB tem {{ $value }} conexões ativas."
+
+      # ─── Business Metrics ─────────────────────────────────────
+      - alert: LoginFailuresSpike
+        expr: rate(login_attempts_total{status="failure"}[5m]) > 10
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Pico de falhas de login > 10/min"
+          description: "Taxa de {{ $value }} falhas de login/minuto — possível ataque de força bruta."
+
+      - alert: AiErrorsSpike
+        expr: rate(ai_errors_total[5m]) > 5
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Pico de erros na IA > 5/min"
+          description: "O AI Service está com {{ $value }} erros/minuto."

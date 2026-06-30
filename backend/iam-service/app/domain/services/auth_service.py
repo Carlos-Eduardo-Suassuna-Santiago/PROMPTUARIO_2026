@@ -15,6 +15,7 @@ from app.infrastructure.repositories.user_repository import (
 )
 from shared.events import UserCreatedEvent, UserDeactivatedEvent, UserUpdatedEvent
 from shared.events.broker import EventPublisher
+from shared.metrics import login_attempts_total, users_registered_total, active_users
 from shared.utils.security import (
     create_access_token,
     create_refresh_token,
@@ -22,6 +23,7 @@ from shared.utils.security import (
     hash_password,
     verify_password,
 )
+from app.config import settings as _settings
 
 
 class AuthService:
@@ -49,15 +51,26 @@ class AuthService:
         else:
             user = await self.user_repo.get_by_email(email)
             if not user or not verify_password(password, user.hashed_password):
+                login_attempts_total.labels(
+                    service=_settings.SERVICE_NAME, status="failure"
+                ).inc()
                 raise HTTPException(
                     status_code=status.HTTP_401_UNAUTHORIZED,
                     detail="Email ou senha inválidos",
                 )
         if not user.is_active:
+            login_attempts_total.labels(
+                service=_settings.SERVICE_NAME, status="failure"
+            ).inc()
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Usuário inativo",
             )
+
+        login_attempts_total.labels(
+            service=_settings.SERVICE_NAME, status="success"
+        ).inc()
+        active_users.labels(service=_settings.SERVICE_NAME).inc()
 
         access_token = create_access_token(
             user_id=user.id,
@@ -224,6 +237,9 @@ class UserService:
         )
         user = await self.user_repo.create(user)
         await self.session.commit()
+        users_registered_total.labels(
+            service=_settings.SERVICE_NAME, role=user.role
+        ).inc()
         await self.publisher.publish(
             UserCreatedEvent(
                 user_id=user.id,
