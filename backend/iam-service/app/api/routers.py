@@ -43,6 +43,7 @@ async def login(body: LoginRequest, request: Request):
     sf, pub, redis = _get_services(request)
     async with sf() as session:
         svc = AuthService(session, pub, redis)
+        svc._ip_address = request.client.host if request.client else None
         return await svc.login(body.email, body.password)
 
 

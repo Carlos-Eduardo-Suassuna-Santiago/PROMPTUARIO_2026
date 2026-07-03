@@ -59,6 +59,12 @@ const NAV_ITEMS: NavItem[] = [
     icon: <Shield className="w-4 h-4" />,
     roles: ['ADMIN'],
   },
+  {
+    label: 'Auditoria',
+    href: '/admin/audit',
+    icon: <Activity className="w-4 h-4" />,
+    roles: ['ADMIN'],
+  },
 ]
 
 export function Sidebar() {
