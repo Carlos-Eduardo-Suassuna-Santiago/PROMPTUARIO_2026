@@ -346,6 +346,51 @@ def _make_doctor_stat_handler(session_factory):
     return handle
 
 
+# ─── Backup Admin Router ──────────────────────────────────────────────────────
+
+backup_router = APIRouter(prefix="/admin/backups", tags=["Backup"])
+
+
+@backup_router.get(
+    "",
+    summary="Listar backups disponíveis",
+    dependencies=[Depends(require_roles("ADMIN"))],
+)
+async def list_backups():
+    import boto3 as _boto3
+    s3 = _boto3.client(
+        "s3",
+        endpoint_url=settings.S3_ENDPOINT,
+        aws_access_key_id=settings.S3_ACCESS_KEY,
+        aws_secret_access_key=settings.S3_SECRET_KEY,
+    )
+    try:
+        response = s3.list_objects_v2(Bucket="backups")
+        objects = response.get("Contents", [])
+    except Exception as exc:
+        logger.warning("Não foi possível listar backups: %s", exc)
+        return {"items": [], "message": "Bucket de backups não acessível"}
+
+    items = []
+    for obj in sorted(objects, key=lambda x: x["LastModified"], reverse=True):
+        try:
+            url = s3.generate_presigned_url(
+                "get_object",
+                Params={"Bucket": "backups", "Key": obj["Key"]},
+                ExpiresIn=3600,
+            )
+        except Exception:
+            url = None
+        items.append({
+            "filename": obj["Key"].split("/")[-1],
+            "key": obj["Key"],
+            "size_mb": round(obj["Size"] / 1_048_576, 2),
+            "created_at": obj["LastModified"].isoformat(),
+            "download_url": url,
+        })
+    return {"items": items, "total": len(items)}
+
+
 # ─── App ─────────────────────────────────────────────────────────────────────
 
 app = FastAPI(
@@ -365,6 +410,7 @@ app.add_middleware(
 setup_observability(app, settings.SERVICE_NAME, settings.LOG_LEVEL)
 
 app.include_router(router, prefix="/api/v1")
+app.include_router(backup_router, prefix="/api/v1")
 
 
 @app.on_event("startup")
