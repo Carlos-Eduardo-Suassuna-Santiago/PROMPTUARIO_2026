@@ -100,8 +100,10 @@ class MedicalRecordUpdate(BaseModel):
 
 class MedicalRecordHistoryResponse(BaseModel):
     id: str
+    record_id: str
     changed_by: str
     change_type: str
+    snapshot: dict | None = None
     created_at: datetime
     model_config = {"from_attributes": True}
 

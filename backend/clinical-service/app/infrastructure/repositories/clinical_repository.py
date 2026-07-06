@@ -136,6 +136,18 @@ class MedicalRecordRepository:
         await self.session.flush()
         await self.session.commit()
 
+    async def list_history(self, record_id: str) -> list[MedicalRecordHistory]:
+        """Retorna histórico de alterações em ordem decrescente de data."""
+        from sqlalchemy import select
+        from app.domain.models.clinical import MedicalRecordHistory
+
+        result = await self.session.execute(
+            select(MedicalRecordHistory)
+            .where(MedicalRecordHistory.record_id == record_id)
+            .order_by(MedicalRecordHistory.created_at.desc())
+        )
+        return list(result.scalars().all())
+
 
 class PatientProjectionRepository:
     def __init__(self, session: AsyncSession):

@@ -10,7 +10,8 @@ from app.domain.models.schemas import (
     AppointmentCancelRequest, AppointmentCreate,
     AppointmentListResponse, AppointmentResponse,
     ExamRequestCreate, ExamRequestResponse, ExamResultUpdate,
-    MedicalRecordCreate, MedicalRecordResponse, MedicalRecordUpdate,
+    MedicalRecordCreate, MedicalRecordHistoryResponse,
+    MedicalRecordResponse, MedicalRecordUpdate,
     PrescriptionCreate, PrescriptionResponse,
     ScheduleCreate, ScheduleResponse,
     TimeSlotCreate, TimeSlotResponse,
@@ -19,6 +20,7 @@ from app.domain.services.clinical_service import (
     AppointmentService, ExamRequestService,
     MedicalRecordService, PrescriptionService,
 )
+from app.infrastructure.repositories.clinical_repository import MedicalRecordRepository
 from shared.metrics import (
     consultations_total, prescriptions_total, medical_records_total, exam_requests_total,
 )
@@ -163,6 +165,34 @@ async def update_record(record_id: str, body: MedicalRecordUpdate, request: Requ
         record = await svc.update(record_id, body, user.sub)
         record = await svc.repo.get(record.id, load_relations=True)
         return MedicalRecordResponse.model_validate(record)
+
+
+@records_router.get(
+    "/{record_id}/history",
+    response_model=list[MedicalRecordHistoryResponse],
+    summary="Histórico de alterações do prontuário",
+    dependencies=[Depends(require_roles("DOCTOR", "ADMIN"))],
+)
+async def get_record_history(
+    record_id: str,
+    request: Request,
+    user=Depends(get_current_user),
+):
+    async with _sf(request)() as session:
+        repo = MedicalRecordRepository(session)
+        record = await repo.get(record_id)
+        if not record:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Prontuário não encontrado",
+            )
+        if user.role == "DOCTOR" and record.doctor_id != user.sub:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Acesso negado: prontuário de outro médico",
+            )
+        history = await repo.list_history(record_id)
+        return [MedicalRecordHistoryResponse.model_validate(h) for h in history]
 
 
 @records_router.get("/patient/{patient_id}", response_model=dict)
