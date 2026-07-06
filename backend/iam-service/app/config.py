@@ -25,6 +25,17 @@ class Settings(BaseSettings):
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
 
     # First admin user (created on startup if DB is empty)
+    # OAuth GitHub
+    GITHUB_CLIENT_ID: str = ""
+    GITHUB_CLIENT_SECRET: str = ""
+    # OAuth Google
+    GOOGLE_CLIENT_ID: str = ""
+    GOOGLE_CLIENT_SECRET: str = ""
+    # URL base do gateway (para construir callback URLs do OAuth)
+    OAUTH_REDIRECT_BASE_URL: str = "http://localhost:8000"
+    # URL do frontend para receber tokens após OAuth
+    FRONTEND_CALLBACK_URL: str = "http://localhost:3000/auth/callback"
+
     FIRST_ADMIN_EMAIL: str = "admin@promptuario.health"
     FIRST_ADMIN_PASSWORD: str = "Admin@12345"
     FIRST_ADMIN_NAME: str = "Administrador"

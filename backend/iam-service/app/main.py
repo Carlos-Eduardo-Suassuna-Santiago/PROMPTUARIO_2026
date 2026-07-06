@@ -7,8 +7,10 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.oauth_router import oauth_router
 from app.api.routers import auth_router, users_router
 from app.config import settings
+from app.domain.models.oauth_account import OAuthAccount
 from app.domain.models.user import User
 from shared.events.broker import EventPublisher
 from shared.models.database import Base, build_engine, build_session_factory
@@ -37,6 +39,7 @@ setup_observability(app, settings.SERVICE_NAME, settings.LOG_LEVEL)
 
 app.include_router(auth_router, prefix="/api/v1")
 app.include_router(users_router, prefix="/api/v1")
+app.include_router(oauth_router, prefix="/api/v1")
 
 
 @app.on_event("startup")

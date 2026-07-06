@@ -24,6 +24,10 @@ export const authApi = {
     api.post('/auth/change-password', { current_password, new_password }),
 
   me: () => api.get<User>('/users/me').then(r => r.data),
+
+  // OAuth — list linked accounts
+  listOAuthAccounts: () =>
+    api.get<{ accounts: Array<{ provider: string; email: string }> }>('/auth/oauth/accounts').then(r => r.data),
 }
 
 // ─── Users ─────────────────────────────────────────────────────────────────
