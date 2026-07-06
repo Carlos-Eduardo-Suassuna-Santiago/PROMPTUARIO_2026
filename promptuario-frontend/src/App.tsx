@@ -10,6 +10,9 @@ import { PageLoader } from '@/components/ui'
 const LoginPage = lazy(() =>
   import('@/pages/auth/LoginPage').then((m) => ({ default: m.LoginPage }))
 )
+const OAuthCallback = lazy(() =>
+  import('@/pages/auth/OAuthCallback').then((m) => ({ default: m.OAuthCallback }))
+)
 const DashboardPage = lazy(() =>
   import('@/pages/dashboard/DashboardPage').then((m) => ({ default: m.DashboardPage }))
 )
@@ -67,6 +70,7 @@ function AppRoutes() {
       <Routes>
         {/* Public */}
         <Route path="/login" element={<LoginPage />} />
+        <Route path="/auth/callback" element={<OAuthCallback />} />
 
         {/* Protected — requires auth */}
         <Route element={<AuthGuard />}>
