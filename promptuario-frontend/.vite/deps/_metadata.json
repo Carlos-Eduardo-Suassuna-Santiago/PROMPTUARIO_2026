@@ -1,0 +1,82 @@
+{
+  "hash": "8c711d38",
+  "configHash": "1e0181f5",
+  "lockfileHash": "7064b08b",
+  "browserHash": "d9667508",
+  "optimized": {
+    "react/jsx-dev-runtime": {
+      "src": "../../node_modules/react/jsx-dev-runtime.js",
+      "file": "react_jsx-dev-runtime.js",
+      "fileHash": "dbdbb486",
+      "needsInterop": true
+    },
+    "react": {
+      "src": "../../node_modules/react/index.js",
+      "file": "react.js",
+      "fileHash": "eb812f02",
+      "needsInterop": true
+    },
+    "react-dom/client": {
+      "src": "../../node_modules/react-dom/client.js",
+      "file": "react-dom_client.js",
+      "fileHash": "275a62f8",
+      "needsInterop": true
+    },
+    "react-router-dom": {
+      "src": "../../node_modules/react-router-dom/dist/index.js",
+      "file": "react-router-dom.js",
+      "fileHash": "099b11f6",
+      "needsInterop": false
+    },
+    "@tanstack/react-query": {
+      "src": "../../node_modules/@tanstack/react-query/build/modern/index.js",
+      "file": "@tanstack_react-query.js",
+      "fileHash": "03b13570",
+      "needsInterop": false
+    },
+    "@tanstack/react-query-devtools": {
+      "src": "../../node_modules/@tanstack/react-query-devtools/build/modern/index.js",
+      "file": "@tanstack_react-query-devtools.js",
+      "fileHash": "a0ff1eba",
+      "needsInterop": false
+    },
+    "lucide-react": {
+      "src": "../../node_modules/lucide-react/dist/esm/lucide-react.js",
+      "file": "lucide-react.js",
+      "fileHash": "a7766d65",
+      "needsInterop": false
+    },
+    "recharts": {
+      "src": "../../node_modules/recharts/es6/index.js",
+      "file": "recharts.js",
+      "fileHash": "c8b58c5e",
+      "needsInterop": false
+    }
+  },
+  "chunks": {
+    "I4EE2JD6-BYE7B5KD": {
+      "file": "I4EE2JD6-BYE7B5KD.js"
+    },
+    "C2NHY6T5-HREKREKS": {
+      "file": "C2NHY6T5-HREKREKS.js"
+    },
+    "chunk-W65F7TJ7": {
+      "file": "chunk-W65F7TJ7.js"
+    },
+    "chunk-PV7ZWGTI": {
+      "file": "chunk-PV7ZWGTI.js"
+    },
+    "chunk-LPTCPB3Q": {
+      "file": "chunk-LPTCPB3Q.js"
+    },
+    "chunk-NX3QQ7BT": {
+      "file": "chunk-NX3QQ7BT.js"
+    },
+    "chunk-2CLD7BNN": {
+      "file": "chunk-2CLD7BNN.js"
+    },
+    "chunk-WOOG5QLI": {
+      "file": "chunk-WOOG5QLI.js"
+    }
+  }
+}

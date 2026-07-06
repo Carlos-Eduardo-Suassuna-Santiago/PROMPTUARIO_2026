@@ -20,6 +20,10 @@ class Settings(BaseSettings):
     S3_SECRET_KEY: str = "promptuario_pass"
     S3_BUCKET_PRESCRIPTIONS: str = "prescriptions"
 
+    # Celery (para geração assíncrona de PDF)
+    CELERY_BROKER_URL: str = "redis://localhost:6379/3"
+    CELERY_RESULT_BACKEND: str = "redis://localhost:6379/3"
+
     # Business rules
     APPOINTMENT_CANCEL_HOURS_MIN: int = 24
 
