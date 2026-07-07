@@ -1,0 +1,16 @@
+[tool.ruff]
+target-version = "py312"
+line-length = 120
+
+[tool.ruff.lint]
+ignore = [
+    "E501",   # line too long
+    "F401",   # imported but unused (shared modules)
+    "F811",   # redefinition (common em FastAPI)
+    "E402",   # module level import not at top
+]
+exclude = [
+    "__pycache__/",
+    "migrations/",
+    ".git/",
+]
