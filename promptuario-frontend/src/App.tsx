@@ -34,6 +34,9 @@ const ReportsPage = lazy(() =>
 const UserManagementPage = lazy(() =>
   import('@/pages/admin/UserManagementPage').then((m) => ({ default: m.UserManagementPage }))
 )
+const AuditPage = lazy(() =>
+  import('@/pages/admin/AuditPage').then((m) => ({ default: m.AuditPage }))
+)
 
 // React Query client
 const queryClient = new QueryClient({
@@ -101,6 +104,7 @@ function AppRoutes() {
             {/* ADMIN only */}
             <Route element={<RoleGuard allowedRoles={['ADMIN']} />}>
               <Route path="/admin/users" element={<UserManagementPage />} />
+              <Route path="/admin/audit" element={<AuditPage />} />
             </Route>
 
           </Route>

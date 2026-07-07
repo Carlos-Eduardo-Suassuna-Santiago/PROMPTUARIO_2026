@@ -17,6 +17,14 @@ class Base(DeclarativeBase):
     pass
 
 
+# Registra AuditLog no metadata compartilhado.
+# Garante que Base.metadata.create_all() crie a tabela audit_logs
+# em QUALQUER banco que usar este Base.
+# A importação é feita aqui (não no início) para evitar importação circular:
+# audit → database (já carregada → Base já definida)
+from shared.audit import AuditLog as _AuditLog  # noqa: F401, E402
+
+
 def build_engine(database_url: str):
     return create_async_engine(
         database_url,

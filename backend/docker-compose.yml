@@ -249,6 +249,9 @@ services:
       SERVICE_NAME: reporting-service
       LOG_LEVEL: INFO
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+      IAM_DB_URL: postgresql://iam:iam_pass@db-iam:5432/iam_db
+      PATIENT_DB_URL: postgresql://patient:patient_pass@db-patient:5432/patient_db
+      CLINICAL_DB_URL: postgresql://clinical:clinical_pass@db-clinical:5432/clinical_db
     depends_on:
       db-reporting:
         condition: service_healthy

@@ -188,3 +188,32 @@ export const reportsApi = {
   downloadExport: (jobId: string) =>
     api.get(`/reports/export/${jobId}/download`, { responseType: 'blob' }),
 }
+
+// ─── Audit ──────────────────────────────────────────────────────────────────
+export const auditApi = {
+  logs: (params?: {
+    service?: string; table_name?: string; operation?: string;
+    user_id?: string; from_date?: string; to_date?: string;
+    page?: number; size?: number;
+  }) => api.get<{ items: Record<string, unknown>[]; total: number; page: number; size: number }>(
+    '/audit/logs', { params }
+  ).then(r => r.data),
+
+  summary: (params?: { from_date?: string; to_date?: string }) =>
+    api.get<{
+      period: { from: string; to: string };
+      total: number;
+      by_operation: Record<string, number>;
+      by_service: Record<string, number>;
+      by_table: Record<string, number>;
+    }>('/audit/summary', { params }).then(r => r.data),
+
+  suspicious: () =>
+    api.get<{
+      alerts: Array<{
+        type: string; severity: string; service: string;
+        user_id?: string; user_email?: string; count: number; period_hour?: string;
+      }>;
+      total_alerts: number; period_days: number; generated_at: string;
+    }>('/audit/suspicious').then(r => r.data),
+}

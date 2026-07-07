@@ -20,5 +20,9 @@ class Settings(BaseSettings):
     S3_SECRET_KEY: str = "promptuario_pass"
     S3_BUCKET_REPORTS: str = "reports"
 
+    IAM_DB_URL: str = "postgresql://iam:iam_pass@db-iam:5432/iam_db"
+    PATIENT_DB_URL: str = "postgresql://patient:patient_pass@db-patient:5432/patient_db"
+    CLINICAL_DB_URL: str = "postgresql://clinical:clinical_pass@db-clinical:5432/clinical_db"
+
 
 settings = Settings()

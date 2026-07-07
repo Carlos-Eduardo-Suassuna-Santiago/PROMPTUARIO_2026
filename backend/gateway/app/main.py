@@ -72,6 +72,7 @@ ROUTE_TABLE: list[tuple[str, str, bool]] = [
     ("/api/v1/ai",           settings.AI_SERVICE_URL,        True),
     ("/api/v1/reports",      settings.REPORTING_SERVICE_URL, True),
     ("/api/v1/admin",        settings.REPORTING_SERVICE_URL, True),
+    ("/api/v1/audit",        settings.REPORTING_SERVICE_URL, True),
 ]
 
 # ─── App ─────────────────────────────────────────────────────────────────────
