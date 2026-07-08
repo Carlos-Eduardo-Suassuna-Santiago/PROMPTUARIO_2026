@@ -189,5 +189,19 @@ def _make_prescription_handler(db, redis_client, publisher):
 
 
 @app.get("/healthz", tags=["Health"])
-async def health():
-    return {"status": "ok", "service": settings.SERVICE_NAME}
+async def health(request: Request):
+    # Tenta obter o estado do circuit breaker se houver um cliente ativo
+    circuit_state = "N/A"
+    try:
+        svc = AIService(request.app.state.db)
+        client = svc._get_llm_client()
+        circuit_state = client.state
+    except Exception:
+        pass
+    return {
+        "status": "ok",
+        "service": settings.SERVICE_NAME,
+        "llm_configured": bool(settings.LLM_API_KEY),
+        "llm_model": settings.LLM_MODEL,
+        "circuit_breaker": circuit_state,
+    }

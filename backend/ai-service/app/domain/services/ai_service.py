@@ -27,6 +27,21 @@ class AIService:
     def __init__(self, db, redis_client=None):
         self.db = db  # Motor AsyncIOMotorDatabase
         self.redis = redis_client
+        # LLMClient — instanciado na primeira chamada (lazy) para evitar
+        # import circular e permitir teste sem API key
+        self._llm_client: "LLMClient | None" = None
+
+    def _get_llm_client(self) -> "LLMClient":
+        """Lazy instantiation do LLMClient com as settings atuais."""
+        if self._llm_client is None:
+            from app.infrastructure.llm_client import LLMClient
+            self._llm_client = LLMClient(
+                api_key=settings.LLM_API_KEY,
+                model=settings.LLM_MODEL,
+                max_tokens=settings.LLM_MAX_TOKENS,
+                redis_client=self.redis,
+            )
+        return self._llm_client
 
     async def create_job(
         self,
@@ -177,8 +192,11 @@ class AIService:
         return await self._call_llm(prompt, schema="clinical_summary")
 
     async def _call_llm(self, prompt: str, schema: str) -> dict:
-        """Call OpenAI-compatible API."""
-        import httpx
+        """
+        Chama a LLM com circuit breaker, retry e cache.
+        Em caso de falha ou ausência de API key, retorna mock response.
+        """
+        from app.infrastructure.llm_client import CircuitOpenError
 
         system_prompt = (
             "Você é um assistente médico de suporte à decisão clínica. "
@@ -187,26 +205,38 @@ class AIService:
             "IMPORTANTE: Esta é uma ferramenta de apoio — o médico tem a decisão final."
         )
 
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            response = await client.post(
-                "https://api.openai.com/v1/chat/completions",
-                headers={
-                    "Authorization": f"Bearer {settings.LLM_API_KEY}",
-                    "Content-Type": "application/json",
-                },
-                json={
-                    "model": settings.LLM_MODEL,
-                    "max_tokens": settings.LLM_MAX_TOKENS,
-                    "messages": [
-                        {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": prompt},
-                    ],
-                    "response_format": {"type": "json_object"},
-                },
-            )
-            response.raise_for_status()
-            content = response.json()["choices"][0]["message"]["content"]
-            return json.loads(content)
+        client = self._get_llm_client()
+
+        try:
+            result = await client.call(prompt, system_prompt)
+            if result is None:
+                # Sem API key — modo mock
+                logger.info("LLM em modo mock (LLM_API_KEY não configurada)")
+                return self._mock_response(schema)
+            return result
+
+        except CircuitOpenError as exc:
+            logger.warning("Circuit breaker OPEN: %s — usando mock", exc)
+            return self._mock_response(schema)
+
+        except Exception as exc:
+            logger.error("Falha na chamada LLM após retries: %s — usando mock", exc)
+            return self._mock_response(schema)
+
+    def _mock_response(self, schema: str) -> dict:
+        """Resposta simulada quando LLM não está disponível."""
+        base = {
+            "disclaimer": "Análise simulada — LLM não disponível ou não configurada",
+        }
+        if schema == "drug_interaction":
+            return {**base, "risk_level": "UNKNOWN", "interactions_found": [],
+                    "allergy_conflicts": [], "recommendations": []}
+        elif schema == "symptom_analysis":
+            return {**base, "risk_level": "UNKNOWN", "possible_diagnoses": [],
+                    "recommended_exams": [], "red_flags": []}
+        elif schema == "clinical_summary":
+            return {**base, "risk_level": "UNKNOWN", "summary": "Resumo indisponível"}
+        return base
 
 
 def _build_drug_interaction_prompt(medications: list, allergies: list) -> str:
