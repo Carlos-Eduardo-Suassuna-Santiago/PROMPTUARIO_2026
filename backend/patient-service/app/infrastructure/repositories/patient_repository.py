@@ -1,10 +1,20 @@
 from __future__ import annotations
 
-from sqlalchemy import func, select
+import uuid
+from datetime import datetime, timezone
+
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.domain.models.patient import Allergy, ContinuousMedication, Patient, Vaccine
+from app.domain.models.patient import (
+    Allergy,
+    ContinuousMedication,
+    MedicationHistory,
+    Patient,
+    PatientDocument,
+    Vaccine,
+)
 
 
 class PatientRepository:
@@ -18,8 +28,16 @@ class PatientRepository:
                 selectinload(Patient.allergies),
                 selectinload(Patient.vaccines),
                 selectinload(Patient.medications),
+                selectinload(Patient.medication_history),
+                selectinload(Patient.documents),
             )
         result = await self.session.execute(q)
+        return result.scalar_one_or_none()
+
+    async def get_by_id_include_inactive(self, patient_id: str) -> Patient | None:
+        result = await self.session.execute(
+            select(Patient).where(Patient.id == patient_id)
+        )
         return result.scalar_one_or_none()
 
     async def get_by_user_id(self, user_id: str) -> Patient | None:
@@ -144,6 +162,87 @@ class MedicationRepository:
         await self.session.refresh(med)
         return med
 
+    async def update(self, med: ContinuousMedication) -> ContinuousMedication:
+        await self.session.flush()
+        await self.session.refresh(med)
+        return med
+
     async def delete(self, med: ContinuousMedication) -> None:
         await self.session.delete(med)
         await self.session.flush()
+
+
+class MedicationHistoryRepository:
+    def __init__(self, session: AsyncSession):
+        self.session = session
+
+    async def list_by_patient(self, patient_id: str) -> list[MedicationHistory]:
+        result = await self.session.execute(
+            select(MedicationHistory)
+            .where(MedicationHistory.patient_id == patient_id)
+            .order_by(MedicationHistory.created_at.desc())
+        )
+        return list(result.scalars().all())
+
+    async def list_by_medication(self, medication_id: str) -> list[MedicationHistory]:
+        result = await self.session.execute(
+            select(MedicationHistory)
+            .where(MedicationHistory.medication_id == medication_id)
+            .order_by(MedicationHistory.version.asc())
+        )
+        return list(result.scalars().all())
+
+    async def create(self, history: MedicationHistory) -> MedicationHistory:
+        self.session.add(history)
+        await self.session.flush()
+        await self.session.refresh(history)
+        return history
+
+
+class DocumentRepository:
+    def __init__(self, session: AsyncSession):
+        self.session = session
+
+    async def list_by_patient(
+        self, patient_id: str, page: int = 1, size: int = 20, document_type: str | None = None
+    ) -> tuple[list[PatientDocument], int]:
+        q = select(PatientDocument).where(
+            PatientDocument.patient_id == patient_id,
+            PatientDocument.is_active == True,
+        )
+        cq = select(func.count()).select_from(PatientDocument).where(
+            PatientDocument.patient_id == patient_id,
+            PatientDocument.is_active == True,
+        )
+        if document_type:
+            q = q.where(PatientDocument.document_type == document_type)
+            cq = cq.where(PatientDocument.document_type == document_type)
+        total = await self.session.scalar(cq) or 0
+        result = await self.session.execute(
+            q.order_by(PatientDocument.created_at.desc())
+            .offset((page - 1) * size)
+            .limit(size)
+        )
+        return list(result.scalars().all()), total
+
+    async def get(self, document_id: str, patient_id: str) -> PatientDocument | None:
+        result = await self.session.execute(
+            select(PatientDocument).where(
+                PatientDocument.id == document_id,
+                PatientDocument.patient_id == patient_id,
+            )
+        )
+        return result.scalar_one_or_none()
+
+    async def create(self, doc: PatientDocument) -> PatientDocument:
+        self.session.add(doc)
+        await self.session.flush()
+        await self.session.refresh(doc)
+        return doc
+
+    async def soft_delete(self, doc: PatientDocument) -> PatientDocument:
+        doc.is_active = False
+        doc.deleted_at = datetime.now(timezone.utc)
+        await self.session.flush()
+        await self.session.refresh(doc)
+        return doc
