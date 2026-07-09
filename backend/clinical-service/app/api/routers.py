@@ -9,9 +9,9 @@ from app.config import settings
 from app.domain.models.schemas import (
     AppointmentCancelRequest, AppointmentCreate,
     AppointmentListResponse, AppointmentResponse,
-    ExamRequestCreate, ExamRequestResponse, ExamResultUpdate,
-    MedicalRecordCreate, MedicalRecordResponse, MedicalRecordUpdate,
-    PrescriptionCreate, PrescriptionResponse,
+    ExamRequestCreate, ExamRequestHistoryResponse, ExamRequestResponse, ExamResultUpdate,
+    MedicalRecordCreate, MedicalRecordHistoryResponse, MedicalRecordResponse, MedicalRecordUpdate,
+    PrescriptionCreate, PrescriptionHistoryResponse, PrescriptionPdfDownloadResponse, PrescriptionResponse,
     ScheduleCreate, ScheduleResponse,
     TimeSlotCreate, TimeSlotResponse,
 )
@@ -165,6 +165,47 @@ async def update_record(record_id: str, body: MedicalRecordUpdate, request: Requ
         return MedicalRecordResponse.model_validate(record)
 
 
+@records_router.post(
+    "/{record_id}/sign",
+    response_model=MedicalRecordResponse,
+    dependencies=[Depends(require_roles("DOCTOR"))],
+)
+async def sign_record(record_id: str, request: Request, user=Depends(get_current_user)):
+    """Digitally sign a medical record — computes and stores an integrity hash."""
+    async with _sf(request)() as session:
+        svc = MedicalRecordService(session, _pub(request))
+        record = await svc.sign(record_id, user.sub)
+        record = await svc.repo.get(record.id, load_relations=True)
+        return MedicalRecordResponse.model_validate(record)
+
+
+@records_router.get(
+    "/{record_id}/signature/verify",
+    dependencies=[Depends(require_roles("DOCTOR", "ADMIN"))],
+)
+async def verify_record_signature(record_id: str, request: Request):
+    """Verify the digital signature integrity of a medical record."""
+    async with _sf(request)() as session:
+        svc = MedicalRecordService(session, _pub(request))
+        return await svc.verify_signature(record_id)
+
+
+@records_router.get(
+    "/{record_id}/history",
+    response_model=list[MedicalRecordHistoryResponse],
+    dependencies=[Depends(require_roles("DOCTOR", "ADMIN"))],
+)
+async def get_record_history(record_id: str, request: Request):
+    """Get the full audit history of a medical record."""
+    async with _sf(request)() as session:
+        svc = MedicalRecordService(session, _pub(request))
+        record = await svc.repo.get(record_id, load_relations=True)
+        if not record:
+            from fastapi import HTTPException
+            raise HTTPException(status_code=404, detail="Prontuário não encontrado")
+        return [MedicalRecordHistoryResponse.model_validate(h) for h in record.history]
+
+
 @records_router.get("/patient/{patient_id}", response_model=dict)
 async def list_patient_records(
     patient_id: str, request: Request,
@@ -197,6 +238,46 @@ async def create_prescription(record_id: str, body: PrescriptionCreate, request:
         return PrescriptionResponse.model_validate(result)
 
 
+@records_router.get(
+    "/{record_id}/prescriptions/{prescription_id}/pdf/download",
+    response_model=PrescriptionPdfDownloadResponse,
+    dependencies=[Depends(require_roles("DOCTOR", "ADMIN", "ATTENDANT"))],
+)
+async def download_prescription_pdf(record_id: str, prescription_id: str, request: Request):
+    """Get a pre-signed S3 URL to download the prescription PDF."""
+    async with _sf(request)() as session:
+        svc = PrescriptionService(session, _pub(request))
+        url = await svc.get_pdf_download_url(prescription_id)
+        return PrescriptionPdfDownloadResponse(
+            download_url=url,
+            expires_in_seconds=settings.S3_PRESIGNED_URL_EXPIRY,
+        )
+
+
+@records_router.get(
+    "/{record_id}/prescriptions/{prescription_id}/history",
+    response_model=list[PrescriptionHistoryResponse],
+    dependencies=[Depends(require_roles("DOCTOR", "ADMIN"))],
+)
+async def get_prescription_history(record_id: str, prescription_id: str, request: Request):
+    """Get the audit history of a prescription."""
+    from app.infrastructure.repositories.clinical_repository import PrescriptionRepository
+    async with _sf(request)() as session:
+        repo = PrescriptionRepository(session)
+        rx = await repo.get(prescription_id)
+        if not rx:
+            from fastapi import HTTPException
+            raise HTTPException(status_code=404, detail="Prescrição não encontrada")
+        from app.domain.models.clinical import PrescriptionHistory
+        from sqlalchemy import select
+        result = await session.execute(
+            select(PrescriptionHistory)
+            .where(PrescriptionHistory.prescription_id == prescription_id)
+            .order_by(PrescriptionHistory.created_at.desc())
+        )
+        return [PrescriptionHistoryResponse.model_validate(h) for h in result.scalars().all()]
+
+
 # ─── Exam Requests ────────────────────────────────────────────────────────────
 
 @records_router.post(
@@ -227,3 +308,21 @@ async def record_exam_result(
         result = await svc.record_result(record_id, exam_id, body, user.sub)
         exam_requests_total.labels(service=_settings.SERVICE_NAME, status="completed").inc()
         return ExamRequestResponse.model_validate(result)
+
+
+@records_router.get(
+    "/{record_id}/exams/{exam_id}/history",
+    response_model=list[ExamRequestHistoryResponse],
+    dependencies=[Depends(require_roles("DOCTOR", "ADMIN"))],
+)
+async def get_exam_history(record_id: str, exam_id: str, request: Request):
+    """Get the audit history of an exam request."""
+    from app.domain.models.clinical import ExamRequestHistory
+    from sqlalchemy import select
+    async with _sf(request)() as session:
+        result = await session.execute(
+            select(ExamRequestHistory)
+            .where(ExamRequestHistory.exam_id == exam_id)
+            .order_by(ExamRequestHistory.created_at.desc())
+        )
+        return [ExamRequestHistoryResponse.model_validate(h) for h in result.scalars().all()]

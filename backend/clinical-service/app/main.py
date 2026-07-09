@@ -8,9 +8,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api.routers import appointments_router, records_router, schedules_router
 from app.config import settings
 from app.domain.models.clinical import (
-    Appointment, DoctorSchedule, ExamRequest, MedicalRecord,
-    MedicalRecordHistory, PatientProjection, Prescription, TimeSlot,
+    Appointment, DoctorSchedule, ExamRequest, ExamRequestHistory,
+    MedicalRecord, MedicalRecordHistory, PatientProjection,
+    Prescription, PrescriptionHistory, TimeSlot,
 )
+from app.domain.services.clinical_service import _ensure_s3_bucket
 from app.infrastructure.events.consumers import setup_consumers
 from shared.events.broker import EventConsumer, EventPublisher
 from shared.models.database import Base, build_engine, build_session_factory
@@ -21,7 +23,7 @@ logger = logging.getLogger(__name__)
 app = FastAPI(
     title="PROMPTUARIO — Clinical Service",
     description="Agendamentos, prontuários, prescrições e solicitações de exame",
-    version="1.0.0",
+    version="1.1.0",
 )
 
 app.add_middleware(
@@ -55,6 +57,9 @@ async def startup():
     setup_consumers(consumer, app.state.session_factory, publisher)
     await consumer.start()
     app.state.consumer = consumer
+
+    # Ensure MinIO/S3 bucket exists for prescription PDFs
+    _ensure_s3_bucket()
 
     logger.info("Clinical Service started ✅")
 
