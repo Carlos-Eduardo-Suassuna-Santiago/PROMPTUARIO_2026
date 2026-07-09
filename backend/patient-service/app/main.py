@@ -7,7 +7,8 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.routers import router
 from app.config import settings
-from app.domain.models.patient import Allergy, ContinuousMedication, Patient, Vaccine
+from app.domain.models.patient import Allergy, ContinuousMedication, MedicationHistory, Patient, PatientDocument, Vaccine
+from app.domain.services.patient_service import _ensure_s3_bucket
 from app.infrastructure.events.consumers import setup_consumers
 from shared.events.broker import EventConsumer, EventPublisher
 from shared.models.database import Base, build_engine, build_session_factory
@@ -18,7 +19,7 @@ logger = logging.getLogger(__name__)
 app = FastAPI(
     title="PROMPTUARIO — Patient Service",
     description="Cadastro e histórico de saúde de pacientes",
-    version="1.0.0",
+    version="1.1.0",
 )
 
 app.add_middleware(
@@ -50,6 +51,9 @@ async def startup():
     setup_consumers(consumer, app.state.session_factory, publisher)
     await consumer.start()
     app.state.consumer = consumer
+
+    # Ensure MinIO/S3 bucket exists for patient documents
+    _ensure_s3_bucket()
 
     logger.info("Patient Service started ✅")
 
