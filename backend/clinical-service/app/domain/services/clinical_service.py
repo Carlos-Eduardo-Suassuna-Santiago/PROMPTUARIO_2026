@@ -21,6 +21,7 @@ from app.domain.models.schemas import (
 from app.infrastructure.repositories.clinical_repository import (
     AppointmentRepository, MedicalRecordRepository,
 )
+from shared.audit import log_operation
 from shared.events import (
     AppointmentCancelledEvent, AppointmentCreatedEvent,
     MedicalRecordCreatedEvent, PrescriptionGeneratedEvent,
@@ -60,6 +61,19 @@ class AppointmentService:
                 appointment_type=appt.appointment_type,
                 specialty=appt.specialty,
             )
+        )
+        await log_operation(
+            self.repo.session,
+            service="clinical-service",
+            table="appointments",
+            operation="INSERT",
+            record_id=appt.id,
+            user_id=created_by,
+            new_values={
+                "patient_id": appt.patient_id,
+                "doctor_id": appt.doctor_id,
+                "scheduled_at": appt.scheduled_at.isoformat(),
+            },
         )
         return appt
 
@@ -102,6 +116,16 @@ class AppointmentService:
                 hours_before=hours_before,
                 policy_violated=policy_violated,
             )
+        )
+        await log_operation(
+            self.repo.session,
+            service="clinical-service",
+            table="appointments",
+            operation="UPDATE",
+            record_id=appt_id,
+            user_id=cancelled_by,
+            old_values={"status": "SCHEDULED"},
+            new_values={"status": "CANCELLED", "reason": body.reason},
         )
         return appt
 
@@ -166,6 +190,19 @@ class MedicalRecordService:
                 diagnosis_codes=record.diagnosis_codes or [],
             )
         )
+        await log_operation(
+            self.repo.session,
+            service="clinical-service",
+            table="medical_records",
+            operation="INSERT",
+            record_id=record.id,
+            user_id=doctor_id,
+            user_role="DOCTOR",
+            new_values={
+                "patient_id": record.patient_id,
+                "chief_complaint": record.chief_complaint[:100],
+            },
+        )
         return record
 
     async def get(self, record_id: str, user_id: str, role: str) -> MedicalRecord:
@@ -204,6 +241,16 @@ class MedicalRecordService:
                 change_type="UPDATED",
                 snapshot=changed,
             ))
+            await log_operation(
+                self.repo.session,
+                service="clinical-service",
+                table="medical_records",
+                operation="UPDATE",
+                record_id=record_id,
+                user_id=doctor_id,
+                user_role="DOCTOR",
+                new_values={"changed_fields": list(changed.keys())},
+            )
         return record
 
     async def list_by_patient(self, patient_id: str, page: int, size: int):
@@ -236,6 +283,21 @@ class PrescriptionService:
         self.session.add(rx)
         await self.session.flush()
         await self.session.refresh(rx)
+
+        await log_operation(
+            self.session,
+            service="clinical-service",
+            table="prescriptions",
+            operation="INSERT",
+            record_id=rx.id,
+            user_id=doctor_id,
+            user_role="DOCTOR",
+            new_values={
+                "record_id": record_id,
+                "medications_count": len(rx.medications),
+            },
+        )
+        await self.session.commit()
 
         # Publish event — PDF generation is async (worker picks this up)
         await self.publisher.publish(
@@ -274,6 +336,7 @@ class ExamRequestService:
         self.session.add(exam)
         await self.session.flush()
         await self.session.refresh(exam)
+        await self.session.commit()
         return exam
 
     async def record_result(self, record_id: str, exam_id: str, data: ExamResultUpdate, doctor_id: str) -> ExamRequest:

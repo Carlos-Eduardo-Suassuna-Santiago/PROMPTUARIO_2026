@@ -13,7 +13,12 @@ from app.domain.models.schemas import (
 from app.domain.services.patient_service import (
     AllergyService, DocumentService, MedicationService, PatientService, VaccineService,
 )
+from shared.metrics import (
+    patients_registered_total, patients_active_total,
+    allergies_registered_total, vaccines_registered_total,
+)
 from shared.middleware.auth import make_auth_dependency
+from app.config import settings as _settings
 
 get_current_user, require_roles = make_auth_dependency(
     settings.JWT_SECRET_KEY, settings.JWT_ALGORITHM
@@ -61,7 +66,10 @@ async def list_patients(
 async def create_patient(body: PatientCreate, request: Request):
     async with _sf(request)() as session:
         svc = PatientService(session, _pub(request))
-        return PatientResponse.model_validate(await svc.create(body))
+        patient = await svc.create(body)
+        patients_registered_total.labels(service=_settings.SERVICE_NAME).inc()
+        patients_active_total.labels(service=_settings.SERVICE_NAME).inc()
+        return PatientResponse.model_validate(patient)
 
 
 @router.get("/me", response_model=PatientResponse)
@@ -114,6 +122,7 @@ async def deactivate_patient(patient_id: str, request: Request):
     async with _sf(request)() as session:
         svc = PatientService(session, _pub(request))
         await svc.deactivate(patient_id)
+        patients_active_total.labels(service=_settings.SERVICE_NAME).dec()
 
 
 @router.post(
@@ -150,7 +159,9 @@ async def list_allergies(patient_id: str, request: Request):
 async def create_allergy(patient_id: str, body: AllergyCreate, request: Request):
     async with _sf(request)() as session:
         svc = AllergyService(session, _pub(request))
-        return AllergyResponse.model_validate(await svc.create(patient_id, body))
+        allergy = await svc.create(patient_id, body)
+        allergies_registered_total.labels(service=_settings.SERVICE_NAME).inc()
+        return AllergyResponse.model_validate(allergy)
 
 
 @router.delete(
@@ -186,7 +197,9 @@ async def list_vaccines(patient_id: str, request: Request):
 async def create_vaccine(patient_id: str, body: VaccineCreate, request: Request):
     async with _sf(request)() as session:
         svc = VaccineService(session, _pub(request))
-        return VaccineResponse.model_validate(await svc.create(patient_id, body))
+        vaccine = await svc.create(patient_id, body)
+        vaccines_registered_total.labels(service=_settings.SERVICE_NAME).inc()
+        return VaccineResponse.model_validate(vaccine)
 
 
 @router.delete(

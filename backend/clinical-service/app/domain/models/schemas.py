@@ -41,7 +41,7 @@ class ScheduleResponse(BaseModel):
 # ─── Appointments ────────────────────────────────────────────────────────────
 
 class AppointmentCreate(BaseModel):
-    patient_id: str
+    patient_id: str | None = None  # Auto-atribuído quando perfil for PATIENT
     doctor_id: str
     slot_id: str | None = None
     scheduled_at: datetime

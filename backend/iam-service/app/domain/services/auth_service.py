@@ -15,6 +15,8 @@ from app.infrastructure.repositories.user_repository import (
 )
 from shared.events import UserCreatedEvent, UserDeactivatedEvent, UserUpdatedEvent
 from shared.events.broker import EventPublisher
+from shared.metrics import login_attempts_total, users_registered_total, active_users
+from shared.audit import log_operation
 from shared.utils.security import (
     create_access_token,
     create_refresh_token,
@@ -22,6 +24,7 @@ from shared.utils.security import (
     hash_password,
     verify_password,
 )
+from app.config import settings as _settings
 
 
 class AuthService:
@@ -49,15 +52,26 @@ class AuthService:
         else:
             user = await self.user_repo.get_by_email(email)
             if not user or not verify_password(password, user.hashed_password):
+                login_attempts_total.labels(
+                    service=_settings.SERVICE_NAME, status="failure"
+                ).inc()
                 raise HTTPException(
                     status_code=status.HTTP_401_UNAUTHORIZED,
                     detail="Email ou senha inválidos",
                 )
         if not user.is_active:
+            login_attempts_total.labels(
+                service=_settings.SERVICE_NAME, status="failure"
+            ).inc()
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Usuário inativo",
             )
+
+        login_attempts_total.labels(
+            service=_settings.SERVICE_NAME, status="success"
+        ).inc()
+        active_users.labels(service=_settings.SERVICE_NAME).inc()
 
         access_token = create_access_token(
             user_id=user.id,
@@ -83,6 +97,17 @@ class AuthService:
             + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS),
         )
         await self.token_repo.save(rt)
+        await log_operation(
+            self.session,
+            service="iam-service",
+            table="sessions",
+            operation="AUTH_LOGIN",
+            record_id=user.id,
+            user_id=user.id,
+            user_role=user.role,
+            user_email=user.email,
+            ip_address=getattr(self, "_ip_address", None),
+        )
         await self.session.commit()
 
         return {
@@ -173,6 +198,20 @@ class AuthService:
 
     async def logout(self, refresh_token: str, access_token: str) -> None:
         await self.token_repo.revoke(refresh_token)
+        # Buscar user_id do token para auditar
+        _user_id = None
+        try:
+            _payload = decode_token(access_token, settings.JWT_SECRET_KEY, settings.JWT_ALGORITHM)
+            _user_id = _payload.sub
+        except Exception:
+            pass
+        await log_operation(
+            self.session,
+            service="iam-service",
+            table="sessions",
+            operation="AUTH_LOGOUT",
+            user_id=_user_id,
+        )
         await self.session.commit()
         # Blacklist access token in Redis (until its natural expiry)
         try:
@@ -198,6 +237,14 @@ class AuthService:
         user.hashed_password = hash_password(new_password)
         await self.token_repo.revoke_all_for_user(user_id)
         await self.user_repo.update(user)
+        await log_operation(
+            self.session,
+            service="iam-service",
+            table="users",
+            operation="PASSWORD_CHANGE",
+            record_id=user_id,
+            user_id=user_id,
+        )
         await self.session.commit()
 
 
@@ -223,7 +270,18 @@ class UserService:
             role=role,
         )
         user = await self.user_repo.create(user)
+        await log_operation(
+            self.session,
+            service="iam-service",
+            table="users",
+            operation="INSERT",
+            record_id=user.id,
+            new_values={"email": user.email, "role": user.role, "full_name": user.full_name},
+        )
         await self.session.commit()
+        users_registered_total.labels(
+            service=_settings.SERVICE_NAME, role=user.role
+        ).inc()
         await self.publisher.publish(
             UserCreatedEvent(
                 user_id=user.id,
@@ -258,6 +316,14 @@ class UserService:
             changed.append("email")
         if changed:
             user = await self.user_repo.update(user)
+            await log_operation(
+                self.session,
+                service="iam-service",
+                table="users",
+                operation="UPDATE",
+                record_id=user_id,
+                new_values={"changed_fields": changed},
+            )
             await self.session.commit()
             await self.publisher.publish(
                 UserUpdatedEvent(
@@ -284,6 +350,15 @@ class UserService:
         user.deactivation_reason = reason
         user.deactivated_at = datetime.now(timezone.utc)
         await self.user_repo.update(user)
+        await log_operation(
+            self.session,
+            service="iam-service",
+            table="users",
+            operation="DELETE",
+            record_id=user_id,
+            user_id=deactivated_by,
+            new_values={"is_active": False, "reason": reason},
+        )
         await self.session.commit()
         await self.publisher.publish(
             UserDeactivatedEvent(

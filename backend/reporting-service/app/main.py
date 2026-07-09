@@ -2,11 +2,11 @@ from __future__ import annotations
 
 import json
 import logging
-import sys
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Literal, Optional
 
+import asyncpg
 import boto3
 from botocore.exceptions import ClientError
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
@@ -29,12 +29,10 @@ from shared.events import (
 from shared.events.broker import EventConsumer, EventPublisher
 from shared.middleware.auth import make_auth_dependency
 from shared.models.database import Base, build_engine, build_session_factory
+from shared.metrics import reports_generated_total, reports_errors_total
+from shared.observability import setup_observability
+from app.config import settings as _settings
 
-logging.basicConfig(
-    level=getattr(logging, settings.LOG_LEVEL),
-    format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
-    stream=sys.stdout,
-)
 logger = logging.getLogger(__name__)
 
 get_current_user, require_roles = make_auth_dependency(
@@ -63,7 +61,7 @@ class ReportJobResponse(BaseModel):
     model_config = {"from_attributes": True}
 
 
-# ─── Router ──────────────────────────────────────────────────────────────────
+# ─── Reports Router ──────────────────────────────────────────────────────────
 
 router = APIRouter(prefix="/reports", tags=["Reports"])
 
@@ -89,7 +87,12 @@ async def request_report(body: ReportRequest, request: Request, user=Depends(get
         session.add(job)
         await session.commit()
 
-    # Dispatch to Celery worker
+    reports_generated_total.labels(
+        service=_settings.SERVICE_NAME,
+        report_type=body.report_type,
+        output_format=body.output_format,
+    ).inc()
+
     celery_app.send_task("reporting.generate_report", args=[job.id])
     return {"job_id": job.id, "status": "PENDING"}
 
@@ -124,7 +127,6 @@ async def download_report(job_id: str, request: Request):
     if not job.s3_key:
         raise HTTPException(status_code=400, detail="Arquivo não disponível (JSON output)")
 
-    # Generate pre-signed URL
     s3 = boto3.client(
         "s3",
         endpoint_url=settings.S3_ENDPOINT,
@@ -134,7 +136,7 @@ async def download_report(job_id: str, request: Request):
     url = s3.generate_presigned_url(
         "get_object",
         Params={"Bucket": settings.S3_BUCKET_REPORTS, "Key": job.s3_key},
-        ExpiresIn=300,  # 5 minutes
+        ExpiresIn=300,
     )
     return RedirectResponse(url=url, status_code=302)
 
@@ -156,10 +158,7 @@ async def consultations_report(
             q = q.where(DailyStats.stat_date <= to_date)
         result = await session.execute(q.order_by(DailyStats.stat_date.desc()).limit(90))
         rows = result.scalars().all()
-        return {
-            "data": [{"date": r.stat_date, "consultations": r.value} for r in rows],
-            "total_days": len(rows),
-        }
+        return {"data": [{"date": r.stat_date, "consultations": r.value} for r in rows], "total_days": len(rows)}
 
 
 @router.get(
@@ -180,10 +179,7 @@ async def patients_report(
         result = await session.execute(q.order_by(DailyStats.stat_date.desc()).limit(90))
         rows = result.scalars().all()
         total = sum(r.value for r in rows)
-        return {
-            "data": [{"date": r.stat_date, "new_patients": r.value} for r in rows],
-            "total_new_patients": total,
-        }
+        return {"data": [{"date": r.stat_date, "new_patients": r.value} for r in rows], "total_new_patients": total}
 
 
 @router.get(
@@ -206,12 +202,7 @@ async def doctors_report(
             q = q.where(DailyStats.stat_date <= to_date)
         result = await session.execute(q.order_by(DailyStats.stat_date.desc()).limit(200))
         rows = result.scalars().all()
-        return {
-            "data": [
-                {"doctor_id": r.entity_id, "date": r.stat_date, "consultations": r.value}
-                for r in rows
-            ],
-        }
+        return {"data": [{"doctor_id": r.entity_id, "date": r.stat_date, "consultations": r.value} for r in rows]}
 
 
 @router.get(
@@ -219,37 +210,206 @@ async def doctors_report(
     dependencies=[Depends(require_roles("ADMIN"))],
 )
 async def dashboard_summary(request: Request):
-    """Quick dashboard numbers for the admin panel."""
     async with _sf(request)() as session:
         today = datetime.now(timezone.utc).date().isoformat()
-
         consultations_today = await session.scalar(
-            select(func.sum(DailyStats.value)).where(
-                DailyStats.stat_type == "CONSULTATIONS",
-                DailyStats.stat_date == today,
-            )
+            select(func.sum(DailyStats.value)).where(DailyStats.stat_type == "CONSULTATIONS", DailyStats.stat_date == today)
         ) or 0
-
         new_patients_month = await session.scalar(
-            select(func.sum(DailyStats.value)).where(
-                DailyStats.stat_type == "NEW_PATIENTS",
-                DailyStats.stat_date >= today[:7] + "-01",
-            )
+            select(func.sum(DailyStats.value)).where(DailyStats.stat_type == "NEW_PATIENTS", DailyStats.stat_date >= today[:7] + "-01")
         ) or 0
-
         cancellations_today = await session.scalar(
-            select(func.sum(DailyStats.value)).where(
-                DailyStats.stat_type == "CANCELLATIONS",
-                DailyStats.stat_date == today,
-            )
+            select(func.sum(DailyStats.value)).where(DailyStats.stat_type == "CANCELLATIONS", DailyStats.stat_date == today)
         ) or 0
+        return {"consultations_today": consultations_today, "new_patients_this_month": new_patients_month, "cancellations_today": cancellations_today, "as_of": datetime.now(timezone.utc).isoformat()}
 
-        return {
-            "consultations_today": consultations_today,
-            "new_patients_this_month": new_patients_month,
-            "cancellations_today": cancellations_today,
-            "as_of": datetime.now(timezone.utc).isoformat(),
-        }
+
+# ─── Audit Router ────────────────────────────────────────────────────────────
+
+audit_router = APIRouter(prefix="/audit", tags=["Auditoria"])
+
+
+def _get_db_urls() -> dict[str, str]:
+    return {
+        "iam":      settings.IAM_DB_URL,
+        "patient":  settings.PATIENT_DB_URL,
+        "clinical": settings.CLINICAL_DB_URL,
+    }
+
+
+@audit_router.get(
+    "/logs",
+    summary="Consultar logs de auditoria",
+    dependencies=[Depends(require_roles("ADMIN"))],
+)
+async def get_audit_logs(
+    service: Optional[str] = Query(None, description="iam | patient | clinical | all"),
+    table_name: Optional[str] = Query(None),
+    operation: Optional[str] = Query(None),
+    user_id: Optional[str] = Query(None),
+    from_date: Optional[str] = Query(None),
+    to_date: Optional[str] = Query(None),
+    page: int = Query(1, ge=1),
+    size: int = Query(50, ge=1, le=200),
+):
+    db_urls = _get_db_urls()
+    services = [service] if service and service != "all" else list(db_urls.keys())
+    all_logs: list[dict] = []
+
+    for svc in services:
+        if svc not in db_urls:
+            continue
+        try:
+            conn = await asyncpg.connect(db_urls[svc])
+            try:
+                conditions = ["1=1"]
+                values: list = []
+                if table_name:
+                    conditions.append(f"table_name = ${len(values)+1}")
+                    values.append(table_name)
+                if operation:
+                    conditions.append(f"operation = ${len(values)+1}")
+                    values.append(operation)
+                if user_id:
+                    conditions.append(f"user_id = ${len(values)+1}")
+                    values.append(user_id)
+                if from_date:
+                    conditions.append(f"timestamp::date >= ${len(values)+1}::date")
+                    values.append(from_date)
+                if to_date:
+                    conditions.append(f"timestamp::date <= ${len(values)+1}::date")
+                    values.append(to_date)
+
+                where = " AND ".join(conditions)
+                offset = (page - 1) * size
+
+                rows = await conn.fetch(
+                    f"SELECT * FROM audit_logs WHERE {where} "
+                    f"ORDER BY timestamp DESC "
+                    f"LIMIT ${len(values)+1} OFFSET ${len(values)+2}",
+                    *values, size, offset,
+                )
+                all_logs.extend([dict(r) for r in rows])
+            finally:
+                await conn.close()
+        except Exception as exc:
+            logger.warning("Erro ao consultar audit_logs de %s: %s", svc, exc)
+
+    all_logs.sort(key=lambda x: x.get("timestamp", ""), reverse=True)
+    return {"items": all_logs[:size], "total": len(all_logs), "page": page, "size": size}
+
+
+@audit_router.get(
+    "/summary",
+    summary="Resumo de auditoria",
+    dependencies=[Depends(require_roles("ADMIN"))],
+)
+async def get_audit_summary(
+    from_date: Optional[str] = Query(None),
+    to_date: Optional[str] = Query(None),
+):
+    if not from_date:
+        from_date = (datetime.now(timezone.utc) - timedelta(days=30)).strftime("%Y-%m-%d")
+    if not to_date:
+        to_date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+
+    summary = {
+        "period": {"from": from_date, "to": to_date},
+        "total": 0,
+        "by_operation": {},
+        "by_service": {},
+        "by_table": {},
+    }
+
+    for svc, url in _get_db_urls().items():
+        try:
+            conn = await asyncpg.connect(url)
+            try:
+                rows = await conn.fetch(
+                    "SELECT operation, table_name, COUNT(*) AS cnt "
+                    "FROM audit_logs "
+                    "WHERE timestamp::date BETWEEN $1::date AND $2::date "
+                    "GROUP BY operation, table_name",
+                    from_date, to_date,
+                )
+                for row in rows:
+                    cnt = row["cnt"]
+                    summary["total"] += cnt
+                    summary["by_operation"].setdefault(row["operation"], 0)
+                    summary["by_operation"][row["operation"]] += cnt
+                    summary["by_service"].setdefault(svc, 0)
+                    summary["by_service"][svc] += cnt
+                    summary["by_table"].setdefault(row["table_name"], 0)
+                    summary["by_table"][row["table_name"]] += cnt
+            finally:
+                await conn.close()
+        except Exception as exc:
+            logger.warning("Erro ao resumir audit de %s: %s", svc, exc)
+
+    return summary
+
+
+@audit_router.get(
+    "/suspicious",
+    summary="Atividades suspeitas",
+    dependencies=[Depends(require_roles("ADMIN"))],
+)
+async def get_suspicious():
+    cutoff = (datetime.now(timezone.utc) - timedelta(days=7)).isoformat()
+    alerts: list[dict] = []
+
+    for svc, url in _get_db_urls().items():
+        try:
+            conn = await asyncpg.connect(url)
+            try:
+                # Muitos DELETEs por usuário em 1h
+                rows = await conn.fetch(
+                    "SELECT user_id, user_email, COUNT(*) AS cnt, "
+                    "date_trunc('hour', timestamp) AS hour "
+                    "FROM audit_logs "
+                    "WHERE operation = 'DELETE' AND timestamp > $1 "
+                    "GROUP BY user_id, user_email, date_trunc('hour', timestamp) "
+                    "HAVING COUNT(*) > 10",
+                    cutoff,
+                )
+                for row in rows:
+                    alerts.append({
+                        "type": "EXCESSIVE_DELETES",
+                        "severity": "HIGH",
+                        "service": svc,
+                        "user_id": row["user_id"],
+                        "user_email": row["user_email"],
+                        "count": row["cnt"],
+                        "period_hour": str(row["hour"]),
+                    })
+
+                # Logins com falha repetidos
+                failed = await conn.fetch(
+                    "SELECT user_email, COUNT(*) AS cnt "
+                    "FROM audit_logs "
+                    "WHERE operation = 'AUTH_LOGIN_FAILED' AND timestamp > $1 "
+                    "GROUP BY user_email HAVING COUNT(*) > 5",
+                    cutoff,
+                )
+                for row in failed:
+                    alerts.append({
+                        "type": "BRUTE_FORCE_ATTEMPT",
+                        "severity": "CRITICAL",
+                        "service": svc,
+                        "user_email": row["user_email"],
+                        "count": row["cnt"],
+                    })
+            finally:
+                await conn.close()
+        except Exception as exc:
+            logger.warning("Erro ao verificar suspeitos em %s: %s", svc, exc)
+
+    return {
+        "alerts": alerts,
+        "total_alerts": len(alerts),
+        "period_days": 7,
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+    }
 
 
 # ─── Event Consumers — update DailyStats ─────────────────────────────────────
@@ -283,7 +443,6 @@ def _make_stat_handler(session_factory, stat_type: str, id_field: str):
             data = json.loads(body)
             today = datetime.now(timezone.utc).date().isoformat()
             async with session_factory() as session:
-                # Upsert: increment stat for today
                 existing = await session.execute(
                     select(DailyStats).where(
                         DailyStats.stat_type == stat_type,
@@ -295,12 +454,7 @@ def _make_stat_handler(session_factory, stat_type: str, id_field: str):
                 if row:
                     row.value += 1
                 else:
-                    session.add(DailyStats(
-                        id=str(uuid.uuid4()),
-                        stat_date=today,
-                        stat_type=stat_type,
-                        value=1,
-                    ))
+                    session.add(DailyStats(id=str(uuid.uuid4()), stat_date=today, stat_type=stat_type, value=1))
                 await session.commit()
                 logger.debug("Incremented %s for %s", stat_type, today)
         except Exception as e:
@@ -329,13 +483,7 @@ def _make_doctor_stat_handler(session_factory):
                 if row:
                     row.value += 1
                 else:
-                    session.add(DailyStats(
-                        id=str(uuid.uuid4()),
-                        stat_date=today,
-                        stat_type="DOCTOR_CONSULTATIONS",
-                        entity_id=doctor_id,
-                        value=1,
-                    ))
+                    session.add(DailyStats(id=str(uuid.uuid4()), stat_date=today, stat_type="DOCTOR_CONSULTATIONS", entity_id=doctor_id, value=1))
                 await session.commit()
         except Exception as e:
             logger.error("Error updating doctor stat: %s", e)
@@ -347,7 +495,7 @@ def _make_doctor_stat_handler(session_factory):
 
 app = FastAPI(
     title="PROMPTUARIO — Reporting Service",
-    description="Relatórios e exportações assíncronas via Celery + S3",
+    description="Relatórios, exportações assíncronas e auditoria",
     version="1.0.0",
 )
 
@@ -359,7 +507,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+setup_observability(app, settings.SERVICE_NAME, settings.LOG_LEVEL)
+
 app.include_router(router, prefix="/api/v1")
+app.include_router(audit_router, prefix="/api/v1")
 
 
 @app.on_event("startup")
@@ -369,7 +520,6 @@ async def startup():
         await conn.run_sync(Base.metadata.create_all)
     app.state.session_factory = build_session_factory(engine)
 
-    # Ensure S3 bucket exists
     _ensure_s3_bucket()
 
     publisher = EventPublisher(settings.RABBITMQ_URL)

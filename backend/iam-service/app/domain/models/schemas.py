@@ -89,3 +89,19 @@ class AssignRoleRequest(BaseModel):
 
 class DeactivateUserRequest(BaseModel):
     reason: str = Field(min_length=5, max_length=255)
+
+
+# ─── Doctor listing ───────────────────────────────────────────────────────────
+
+class DoctorResponse(BaseModel):
+    id: str
+    email: str
+    full_name: str
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class DoctorListResponse(BaseModel):
+    items: list[DoctorResponse]
+    total: int

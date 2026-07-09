@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
@@ -8,6 +9,8 @@ from app.domain.models.schemas import (
     AssignRoleRequest,
     ChangePasswordRequest,
     DeactivateUserRequest,
+    DoctorListResponse,
+    DoctorResponse,
     LoginRequest,
     RefreshRequest,
     TokenResponse,
@@ -16,7 +19,9 @@ from app.domain.models.schemas import (
     UserResponse,
     UserUpdate,
 )
+from app.domain.models.user import User
 from app.domain.services.auth_service import AuthService, UserService
+from app.infrastructure.repositories.user_repository import UserRepository
 from shared.middleware.auth import make_auth_dependency
 
 get_current_user, require_roles = make_auth_dependency(
@@ -38,6 +43,7 @@ async def login(body: LoginRequest, request: Request):
     sf, pub, redis = _get_services(request)
     async with sf() as session:
         svc = AuthService(session, pub, redis)
+        svc._ip_address = request.client.host if request.client else None
         return await svc.login(body.email, body.password)
 
 
@@ -127,6 +133,26 @@ async def get_me(request: Request, user=Depends(get_current_user)):
         svc = UserService(session, pub)
         u = await svc.get_user(user.sub)
         return UserResponse.model_validate(u)
+
+
+@users_router.get(
+    "/doctors",
+    response_model=DoctorListResponse,
+    summary="Listar médicos disponíveis",
+)
+async def list_doctors(request: Request, user=Depends(get_current_user)):
+    """Lista todos os usuários com role DOCTOR (acessível para pacientes)."""
+    sf, pub, _ = _get_services(request)
+    async with sf() as session:
+        repo = UserRepository(session)
+        result = await session.execute(
+            select(User).where(User.role == "DOCTOR", User.is_active == True)
+        )
+        doctors = result.scalars().all()
+        return DoctorListResponse(
+            items=[DoctorResponse.model_validate(d) for d in doctors],
+            total=len(doctors),
+        )
 
 
 @users_router.get(

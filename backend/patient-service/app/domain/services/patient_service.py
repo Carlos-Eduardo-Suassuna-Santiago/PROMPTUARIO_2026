@@ -36,6 +36,7 @@ from app.infrastructure.repositories.patient_repository import (
     PatientRepository,
     VaccineRepository,
 )
+from shared.audit import log_operation
 from shared.events import AllergyAddedEvent, PatientCreatedEvent, PatientUpdatedEvent
 from shared.events.broker import EventPublisher
 
@@ -96,6 +97,14 @@ class PatientService:
             patient.emergency_relation = data.emergency_contact.relation
 
         patient = await self.repo.create(patient)
+        await log_operation(
+            self.repo.session,
+            service="patient-service",
+            table="patients",
+            operation="INSERT",
+            record_id=patient.id,
+            new_values={"user_id": patient.user_id, "full_name": patient.full_name},
+        )
         await self.publisher.publish(
             PatientCreatedEvent(
                 patient_id=patient.id,
@@ -167,6 +176,15 @@ class PatientService:
 
         patient = await self.repo.update(patient)
         if changed:
+            await log_operation(
+                self.repo.session,
+                service="patient-service",
+                table="patients",
+                operation="UPDATE",
+                record_id=patient_id,
+                user_id=current_user_id,
+                new_values={"changed_fields": changed},
+            )
             await self.publisher.publish(
                 PatientUpdatedEvent(
                     patient_id=patient.id,
@@ -182,6 +200,14 @@ class PatientService:
             raise HTTPException(status_code=404, detail="Paciente não encontrado")
         patient.is_active = False
         await self.repo.update(patient)
+        await log_operation(
+            self.repo.session,
+            service="patient-service",
+            table="patients",
+            operation="DELETE",
+            record_id=patient_id,
+            new_values={"is_active": False},
+        )
 
     async def anonymize(self, patient_id: str) -> None:
         """LGPD right-to-erasure: replace PII with hashed tokens and hide documents."""
@@ -203,6 +229,14 @@ class PatientService:
         patient.anonymized = True
         patient.is_active = False
         await self.repo.update(patient)
+        await log_operation(
+            self.repo.session,
+            service="patient-service",
+            table="patients",
+            operation="DELETE",
+            record_id=patient_id,
+            new_values={"anonymized": True, "lgpd_reason": "RIGHT_TO_ERASURE"},
+        )
 
         # Soft-delete all active documents
         doc_repo = DocumentRepository(self.repo.session)
@@ -237,6 +271,14 @@ class AllergyService:
             notes=data.notes,
         )
         allergy = await self.repo.create(allergy)
+        await log_operation(
+            self.repo.session,
+            service="patient-service",
+            table="allergies",
+            operation="INSERT",
+            record_id=allergy.id,
+            new_values={"substance": allergy.substance, "severity": allergy.severity},
+        )
         await self.publisher.publish(
             AllergyAddedEvent(
                 patient_id=patient_id,
@@ -251,6 +293,13 @@ class AllergyService:
         allergy = await self.repo.get(allergy_id, patient_id)
         if not allergy:
             raise HTTPException(status_code=404, detail="Alergia não encontrada")
+        await log_operation(
+            self.repo.session,
+            service="patient-service",
+            table="allergies",
+            operation="DELETE",
+            record_id=allergy_id,
+        )
         await self.repo.delete(allergy)
 
 

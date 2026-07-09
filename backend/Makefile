@@ -123,6 +123,10 @@ login: ## Quick login test (returns JWT)
 		-d '{"email":"admin@promptuario.health","password":"Admin@12345"}' \
 		| python3 -m json.tool
 
+seed: ## Populate database with realistic simulated data (500 users)
+	python scripts/seed_db.py
+
+
 clean: ## Remove containers, volumes, and built images
 	$(COMPOSE) down -v --rmi local
 	@echo "🧹 Cleaned up"

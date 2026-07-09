@@ -7,6 +7,11 @@ from datetime import datetime, timezone
 from typing import Any
 
 from app.config import settings
+from shared.metrics import (
+    ai_requests_total, ai_tokens_prompt_total, ai_tokens_completion_total,
+    ai_request_duration_seconds, ai_cache_hits_total, ai_errors_total,
+)
+import time as _time
 
 logger = logging.getLogger(__name__)
 
@@ -58,12 +63,25 @@ class AIService:
         if not job:
             raise ValueError(f"Job {job_id} not found")
 
+        start_time = _time.time()
+        analysis_type = job["analysis_type"]
+        model = settings.LLM_MODEL
+
+        ai_requests_total.labels(
+            service=settings.SERVICE_NAME, model=model, analysis_type=analysis_type
+        ).inc()
+
         await self.db.analysis_jobs.update_one(
             {"_id": job_id}, {"$set": {"status": "RUNNING"}}
         )
 
         try:
             result = await self._dispatch(job)
+            duration = _time.time() - start_time
+            ai_request_duration_seconds.labels(
+                service=settings.SERVICE_NAME, model=model, analysis_type=analysis_type
+            ).observe(duration)
+
             update = {
                 "status": "COMPLETED",
                 "result": result,
@@ -80,16 +98,20 @@ class AIService:
                         job_id=job_id,
                         record_id=job.get("record_id"),
                         patient_id=job["patient_id"],
-                        analysis_type=job["analysis_type"],
+                        analysis_type=analysis_type,
                         risk_level=result.get("risk_level", "UNKNOWN"),
                         result=result,
-                        model_version=settings.LLM_MODEL,
+                        model_version=model,
                     )
                 )
             job.update(update)
             return job
 
         except Exception as e:
+            duration = _time.time() - start_time
+            ai_errors_total.labels(
+                service=settings.SERVICE_NAME, error_type=type(e).__name__
+            ).inc()
             logger.error("Analysis failed for job %s: %s", job_id, e)
             await self.db.analysis_jobs.update_one(
                 {"_id": job_id},

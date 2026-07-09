@@ -83,3 +83,6 @@ pnpm-debug.log*
 # Database
 *.sqlite3
 *.db
+
+PROMPTUARIO_Status_Implementacao.md
+PROMPTUARIO_Prompts_Final_Developer.md

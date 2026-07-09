@@ -68,6 +68,7 @@ class PatientRepository:
         self.session.add(patient)
         await self.session.flush()
         await self.session.refresh(patient)
+        await self.session.commit()
         return patient
 
     async def update(self, patient: Patient) -> Patient:
@@ -102,11 +103,13 @@ class AllergyRepository:
         self.session.add(allergy)
         await self.session.flush()
         await self.session.refresh(allergy)
+        await self.session.commit()
         return allergy
 
     async def delete(self, allergy: Allergy) -> None:
         await self.session.delete(allergy)
         await self.session.flush()
+        await self.session.commit()
 
 
 class VaccineRepository:
@@ -129,11 +132,13 @@ class VaccineRepository:
         self.session.add(vaccine)
         await self.session.flush()
         await self.session.refresh(vaccine)
+        await self.session.commit()
         return vaccine
 
     async def delete(self, vaccine: Vaccine) -> None:
         await self.session.delete(vaccine)
         await self.session.flush()
+        await self.session.commit()
 
 
 class MedicationRepository:
@@ -160,6 +165,7 @@ class MedicationRepository:
         self.session.add(med)
         await self.session.flush()
         await self.session.refresh(med)
+        await self.session.commit()
         return med
 
     async def update(self, med: ContinuousMedication) -> ContinuousMedication:
@@ -170,6 +176,7 @@ class MedicationRepository:
     async def delete(self, med: ContinuousMedication) -> None:
         await self.session.delete(med)
         await self.session.flush()
+        await self.session.commit()
 
 
 class MedicationHistoryRepository:

@@ -1,0 +1,401 @@
+
+services:
+  # ─── DATABASES ────────────────────────────────────────────────
+  db-iam:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_USER: iam
+      POSTGRES_PASSWORD: iam_pass
+      POSTGRES_DB: iam_db
+    volumes:
+      - iam_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U iam -d iam_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks: [backend]
+
+  db-patient:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_USER: patient
+      POSTGRES_PASSWORD: patient_pass
+      POSTGRES_DB: patient_db
+    volumes:
+      - patient_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U patient -d patient_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks: [backend]
+
+  db-clinical:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_USER: clinical
+      POSTGRES_PASSWORD: clinical_pass
+      POSTGRES_DB: clinical_db
+    volumes:
+      - clinical_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U clinical -d clinical_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks: [backend]
+
+  db-reporting:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_USER: reporting
+      POSTGRES_PASSWORD: reporting_pass
+      POSTGRES_DB: reporting_db
+    volumes:
+      - reporting_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U reporting -d reporting_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks: [backend]
+
+  db-ai:
+    image: mongo:7
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ai
+      MONGO_INITDB_ROOT_PASSWORD: ai_pass
+      MONGO_INITDB_DATABASE: ai_db
+    volumes:
+      - ai_data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks: [backend]
+
+  # ─── INFRASTRUCTURE ───────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    networks: [backend]
+    ports:
+      - "6379:6379"
+
+  rabbitmq:
+    image: rabbitmq:3.13-management-alpine
+    environment:
+      RABBITMQ_DEFAULT_USER: promptuario
+      RABBITMQ_DEFAULT_PASS: promptuario_pass
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks: [backend]
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: promptuario
+      MINIO_ROOT_PASSWORD: promptuario_pass
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks: [backend]
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+
+  # ─── MICROSERVICES ────────────────────────────────────────────
+  iam-service:
+    build:
+      context: .
+      dockerfile: iam-service/Dockerfile
+    environment:
+      DATABASE_URL: postgresql+asyncpg://iam:iam_pass@db-iam:5432/iam_db
+      REDIS_URL: redis://redis:6379/0
+      RABBITMQ_URL: amqp://promptuario:promptuario_pass@rabbitmq:5672/
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:-super-secret-change-in-production-32chars}
+      JWT_ALGORITHM: HS256
+      ACCESS_TOKEN_EXPIRE_MINUTES: 30
+      REFRESH_TOKEN_EXPIRE_DAYS: 7
+      GITHUB_CLIENT_ID: ${GITHUB_CLIENT_ID:-}
+      GITHUB_CLIENT_SECRET: ${GITHUB_CLIENT_SECRET:-}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+      OAUTH_REDIRECT_BASE_URL: ${OAUTH_REDIRECT_BASE_URL:-http://localhost:8000}
+      FRONTEND_CALLBACK_URL: ${FRONTEND_CALLBACK_URL:-http://localhost:3000/auth/callback}
+      SERVICE_NAME: iam-service
+      LOG_LEVEL: INFO
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+    depends_on:
+      db-iam:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    networks: [backend]
+    ports:
+      - "8001:8000"
+
+  patient-service:
+    build:
+      context: .
+      dockerfile: patient-service/Dockerfile
+    environment:
+      DATABASE_URL: postgresql+asyncpg://patient:patient_pass@db-patient:5432/patient_db
+      RABBITMQ_URL: amqp://promptuario:promptuario_pass@rabbitmq:5672/
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:-super-secret-change-in-production-32chars}
+      JWT_ALGORITHM: HS256
+      SERVICE_NAME: patient-service
+      LOG_LEVEL: INFO
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+    depends_on:
+      db-patient:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    networks: [backend]
+    ports:
+      - "8002:8000"
+
+  clinical-service:
+    build:
+      context: .
+      dockerfile: clinical-service/Dockerfile
+    environment:
+      DATABASE_URL: postgresql+asyncpg://clinical:clinical_pass@db-clinical:5432/clinical_db
+      RABBITMQ_URL: amqp://promptuario:promptuario_pass@rabbitmq:5672/
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:-super-secret-change-in-production-32chars}
+      JWT_ALGORITHM: HS256
+      S3_ENDPOINT: http://minio:9000
+      S3_ACCESS_KEY: promptuario
+      S3_SECRET_KEY: promptuario_pass
+      S3_BUCKET_PRESCRIPTIONS: prescriptions
+      SERVICE_NAME: clinical-service
+      LOG_LEVEL: INFO
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+    depends_on:
+      db-clinical:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    networks: [backend]
+    ports:
+      - "8003:8000"
+
+  ai-service:
+    build:
+      context: .
+      dockerfile: ai-service/Dockerfile
+    environment:
+      MONGODB_URL: mongodb://ai:ai_pass@db-ai:27017/ai_db?authSource=admin
+      RABBITMQ_URL: amqp://promptuario:promptuario_pass@rabbitmq:5672/
+      REDIS_URL: redis://redis:6379/2
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:-super-secret-change-in-production-32chars}
+      JWT_ALGORITHM: HS256
+      LLM_API_KEY: ${LLM_API_KEY:-}
+      LLM_MODEL: gpt-4o-mini
+      SERVICE_NAME: ai-service
+      LOG_LEVEL: INFO
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+    depends_on:
+      db-ai:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    networks: [backend]
+    ports:
+      - "8004:8000"
+
+  reporting-service:
+    build:
+      context: .
+      dockerfile: reporting-service/Dockerfile
+    environment:
+      DATABASE_URL: postgresql+asyncpg://reporting:reporting_pass@db-reporting:5432/reporting_db
+      CELERY_BROKER_URL: redis://redis:6379/1
+      CELERY_RESULT_BACKEND: redis://redis:6379/1
+      RABBITMQ_URL: amqp://promptuario:promptuario_pass@rabbitmq:5672/
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:-super-secret-change-in-production-32chars}
+      JWT_ALGORITHM: HS256
+      S3_ENDPOINT: http://minio:9000
+      S3_ACCESS_KEY: promptuario
+      S3_SECRET_KEY: promptuario_pass
+      S3_BUCKET_REPORTS: reports
+      SERVICE_NAME: reporting-service
+      LOG_LEVEL: INFO
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+      IAM_DB_URL: postgresql://iam:iam_pass@db-iam:5432/iam_db
+      PATIENT_DB_URL: postgresql://patient:patient_pass@db-patient:5432/patient_db
+      CLINICAL_DB_URL: postgresql://clinical:clinical_pass@db-clinical:5432/clinical_db
+    depends_on:
+      db-reporting:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    networks: [backend]
+    ports:
+      - "8005:8000"
+
+  reporting-worker:
+    build:
+      context: .
+      dockerfile: reporting-service/Dockerfile.worker
+    environment:
+      DATABASE_URL: postgresql+asyncpg://reporting:reporting_pass@db-reporting:5432/reporting_db
+      CELERY_BROKER_URL: redis://redis:6379/1
+      CELERY_RESULT_BACKEND: redis://redis:6379/1
+      RABBITMQ_URL: amqp://promptuario:promptuario_pass@rabbitmq:5672/
+      S3_ENDPOINT: http://minio:9000
+      S3_ACCESS_KEY: promptuario
+      S3_SECRET_KEY: promptuario_pass
+      S3_BUCKET_REPORTS: reports
+    depends_on:
+      - reporting-service
+    networks: [backend]
+
+  # ─── API GATEWAY ──────────────────────────────────────────────
+  gateway:
+    build:
+      context: .
+      dockerfile: gateway/Dockerfile
+    environment:
+      IAM_SERVICE_URL: http://iam-service:8000
+      PATIENT_SERVICE_URL: http://patient-service:8000
+      CLINICAL_SERVICE_URL: http://clinical-service:8000
+      AI_SERVICE_URL: http://ai-service:8000
+      REPORTING_SERVICE_URL: http://reporting-service:8000
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:-super-secret-change-in-production-32chars}
+      JWT_ALGORITHM: HS256
+      REDIS_URL: redis://redis:6379/0
+      LOG_LEVEL: INFO
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+    depends_on:
+      - iam-service
+      - patient-service
+      - clinical-service
+      - ai-service
+      - reporting-service
+    networks: [backend]
+    ports:
+      - "8000:8000"
+
+  # ─── EXPORTERS ──────────────────────────────────────────────
+  # RabbitMQ natively exposes Prometheus metrics on port 15692
+  # (enabled via management plugin). Scraped directly in prometheus.yml.
+  # No separate exporter image needed.
+  #
+  # Optional exporters (uncomment if you want DB metrics):
+  # postgres-exporter:
+  #   image: quay.io/prometheuscommunity/postgres-exporter:v0.15.0
+  #   environment:
+  #     DATA_SOURCE_NAME: "postgresql://iam:iam_pass@db-iam:5432/iam_db?sslmode=disable"
+  #     PG_EXPORTER_AUTO_DISCOVER_DATABASES: "true"
+  #   ports: ["9187:9187"]
+  #   depends_on: [db-iam]
+  #   networks: [backend]
+  #   restart: unless-stopped
+  #
+  # mongodb-exporter:
+  #   image: percona/mongodb_exporter:0.44
+  #   command:
+  #     - "--mongodb.uri=mongodb://ai:ai_pass@db-ai:27017"
+  #     - "--collect-all"
+  #     - "--compatible-mode"
+  #   ports: ["9216:9216"]
+  #   depends_on: [db-ai]
+  #   networks: [backend]
+  #   restart: unless-stopped
+
+  # ─── PROMETHEUS ──────────────────────────────────────────────
+  prometheus:
+    image: prom/prometheus:v2.54.1
+    volumes:
+      - ./observability/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./observability/prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.retention.time=30d"
+    ports:
+      - "9090:9090"
+    networks: [backend]
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:11.2.2
+    volumes:
+      - ./observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - grafana_data:/var/lib/grafana
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    ports:
+      - "3001:3000"
+    depends_on: [prometheus]
+    networks: [backend]
+    restart: unless-stopped
+
+  jaeger:
+    image: jaegertracing/all-in-one:1.58
+    environment:
+      COLLECTOR_OTLP_ENABLED: "true"
+    ports:
+      - "16686:16686"
+      - "14250:14250"
+    networks: [backend]
+    restart: unless-stopped
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.105.0
+    volumes:
+      - ./observability/otel-collector-config.yml:/etc/otelcol-contrib/config.yaml:ro
+    ports:
+      - "4317:4317"
+      - "4318:4318"
+    depends_on: [jaeger]
+    networks: [backend]
+    restart: unless-stopped
+
+networks:
+  backend:
+    driver: bridge
+
+volumes:
+  iam_data:
+  patient_data:
+  clinical_data:
+  reporting_data:
+  ai_data:
+  redis_data:
+  rabbitmq_data:
+  minio_data:
+  prometheus_data:
+  grafana_data:

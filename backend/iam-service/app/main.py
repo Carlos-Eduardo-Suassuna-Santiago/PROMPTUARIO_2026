@@ -1,25 +1,22 @@
 from __future__ import annotations
 
 import logging
-import sys
 
 import redis.asyncio as aioredis
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.oauth_router import oauth_router
 from app.api.routers import auth_router, users_router
 from app.config import settings
+from app.domain.models.oauth_account import OAuthAccount
 from app.domain.models.user import User
 from shared.events.broker import EventPublisher
 from shared.models.database import Base, build_engine, build_session_factory
+from shared.observability import setup_observability
 from shared.utils.security import hash_password
 
-logging.basicConfig(
-    level=getattr(logging, settings.LOG_LEVEL),
-    format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
-    stream=sys.stdout,
-)
 logger = logging.getLogger(__name__)
 
 app = FastAPI(
@@ -38,8 +35,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+setup_observability(app, settings.SERVICE_NAME, settings.LOG_LEVEL)
+
 app.include_router(auth_router, prefix="/api/v1")
 app.include_router(users_router, prefix="/api/v1")
+app.include_router(oauth_router, prefix="/api/v1")
 
 
 @app.on_event("startup")
