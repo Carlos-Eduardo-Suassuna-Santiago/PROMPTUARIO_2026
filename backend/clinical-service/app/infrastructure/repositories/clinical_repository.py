@@ -9,8 +9,8 @@ from sqlalchemy.orm import selectinload
 
 from app.domain.models.clinical import (
     Appointment, DoctorSchedule, ExamRequest,
-    MedicalRecord, MedicalRecordHistory, PatientProjection,
-    Prescription, TimeSlot,
+    ExamRequestHistory, MedicalRecord, MedicalRecordHistory,
+    PatientProjection, Prescription, PrescriptionHistory, TimeSlot,
 )
 
 
@@ -132,6 +132,44 @@ class MedicalRecordRepository:
         return record
 
     async def add_history(self, history: MedicalRecordHistory) -> None:
+        self.session.add(history)
+        await self.session.flush()
+        await self.session.commit()
+
+
+class PrescriptionRepository:
+    def __init__(self, session: AsyncSession):
+        self.session = session
+
+    async def get(self, prescription_id: str) -> Prescription | None:
+        result = await self.session.execute(
+            select(Prescription).where(Prescription.id == prescription_id)
+        )
+        return result.scalar_one_or_none()
+
+    async def update(self, rx: Prescription) -> Prescription:
+        await self.session.flush()
+        await self.session.refresh(rx)
+        await self.session.commit()
+        return rx
+
+    async def add_history(self, history: PrescriptionHistory) -> None:
+        self.session.add(history)
+        await self.session.flush()
+        await self.session.commit()
+
+
+class ExamRequestRepository:
+    def __init__(self, session: AsyncSession):
+        self.session = session
+
+    async def get(self, exam_id: str) -> ExamRequest | None:
+        result = await self.session.execute(
+            select(ExamRequest).where(ExamRequest.id == exam_id)
+        )
+        return result.scalar_one_or_none()
+
+    async def add_history(self, history: ExamRequestHistory) -> None:
         self.session.add(history)
         await self.session.flush()
         await self.session.commit()

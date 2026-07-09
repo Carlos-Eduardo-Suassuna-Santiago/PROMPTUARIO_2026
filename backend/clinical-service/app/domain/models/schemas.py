@@ -86,6 +86,7 @@ class MedicalRecordCreate(BaseModel):
     diagnosis_codes: list[str] = []
     treatment_plan: str | None = None
     observations: str | None = None
+    rich_notes: dict | None = None
 
 
 class MedicalRecordUpdate(BaseModel):
@@ -96,12 +97,19 @@ class MedicalRecordUpdate(BaseModel):
     diagnosis_codes: list[str] | None = None
     treatment_plan: str | None = None
     observations: str | None = None
+    rich_notes: dict | None = None
+
+
+class MedicalRecordSignRequest(BaseModel):
+    """Request to digitally sign a medical record."""
+    pass  # Signature is computed server-side from current snapshot
 
 
 class MedicalRecordHistoryResponse(BaseModel):
     id: str
     changed_by: str
     change_type: str
+    snapshot: dict
     created_at: datetime
     model_config = {"from_attributes": True}
 
@@ -131,6 +139,25 @@ class PrescriptionResponse(BaseModel):
     instructions: str | None
     valid_days: int
     pdf_s3_key: str | None
+    pdf_generated_at: datetime | None
+    signature_hash: str | None
+    signed_by: str | None
+    signed_at: datetime | None
+    created_at: datetime
+    model_config = {"from_attributes": True}
+
+
+class PrescriptionPdfDownloadResponse(BaseModel):
+    download_url: str
+    expires_in_seconds: int = 300
+
+
+class PrescriptionHistoryResponse(BaseModel):
+    id: str
+    prescription_id: str
+    changed_by: str
+    change_type: str
+    snapshot: dict
     created_at: datetime
     model_config = {"from_attributes": True}
 
@@ -161,6 +188,18 @@ class ExamRequestResponse(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class ExamRequestHistoryResponse(BaseModel):
+    id: str
+    exam_id: str
+    changed_by: str
+    change_type: str
+    snapshot: dict
+    created_at: datetime
+    model_config = {"from_attributes": True}
+
+
+# ─── Medical Record Full Response ────────────────────────────────────────────
+
 class MedicalRecordResponse(BaseModel):
     id: str
     appointment_id: str
@@ -173,9 +212,14 @@ class MedicalRecordResponse(BaseModel):
     diagnosis_codes: list[str]
     treatment_plan: str | None
     observations: str | None
+    rich_notes: dict | None
+    signature_hash: str | None
+    signed_by: str | None
+    signed_at: datetime | None
     ai_analysis_id: str | None
     prescriptions: list[PrescriptionResponse] = []
     exam_requests: list[ExamRequestResponse] = []
+    history: list[MedicalRecordHistoryResponse] = []
     created_at: datetime
     updated_at: datetime
     model_config = {"from_attributes": True}

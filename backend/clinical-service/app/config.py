@@ -19,9 +19,18 @@ class Settings(BaseSettings):
     S3_ACCESS_KEY: str = "promptuario"
     S3_SECRET_KEY: str = "promptuario_pass"
     S3_BUCKET_PRESCRIPTIONS: str = "prescriptions"
+    S3_REGION: str = "us-east-1"
+    S3_PRESIGNED_URL_EXPIRY: int = 300  # seconds
+
+    # PDF generation
+    PDF_GENERATION_ENABLED: bool = True
+    PDF_TEMPLATE_LOGO_URL: str = ""
 
     # Business rules
     APPOINTMENT_CANCEL_HOURS_MIN: int = 24
+
+    # Signature
+    SIGNATURE_HASH_ALGORITHM: str = "sha256"
 
 
 settings = Settings()

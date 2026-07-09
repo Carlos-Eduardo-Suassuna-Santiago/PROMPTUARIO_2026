@@ -1,25 +1,31 @@
 from __future__ import annotations
 
+import hashlib
+import io
 import json
+import logging
 import uuid
 from datetime import datetime, timezone
 
+import boto3
+from botocore.exceptions import ClientError
 from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.domain.models.clinical import (
-    Appointment, ExamRequest, MedicalRecord,
-    MedicalRecordHistory, Prescription,
+    Appointment, ExamRequest, ExamRequestHistory, MedicalRecord,
+    MedicalRecordHistory, Prescription, PrescriptionHistory,
 )
 from app.domain.models.schemas import (
     AppointmentCreate, AppointmentCancelRequest,
     ExamRequestCreate, ExamResultUpdate,
-    MedicalRecordCreate, MedicalRecordUpdate,
+    MedicalRecordCreate, MedicalRecordSignRequest, MedicalRecordUpdate,
     PrescriptionCreate,
 )
 from app.infrastructure.repositories.clinical_repository import (
-    AppointmentRepository, MedicalRecordRepository,
+    AppointmentRepository, ExamRequestRepository,
+    MedicalRecordRepository, PrescriptionRepository,
 )
 from shared.audit import log_operation
 from shared.events import (
@@ -27,6 +33,170 @@ from shared.events import (
     MedicalRecordCreatedEvent, PrescriptionGeneratedEvent,
 )
 from shared.events.broker import EventPublisher
+
+logger = logging.getLogger(__name__)
+
+
+# ─── Helpers ──────────────────────────────────────────────────────────────────
+
+def _get_s3_client():
+    return boto3.client(
+        "s3",
+        endpoint_url=settings.S3_ENDPOINT,
+        aws_access_key_id=settings.S3_ACCESS_KEY,
+        aws_secret_access_key=settings.S3_SECRET_KEY,
+        region_name=settings.S3_REGION,
+    )
+
+
+def _ensure_s3_bucket():
+    """Create the S3 prescriptions bucket if it doesn't exist."""
+    try:
+        s3 = _get_s3_client()
+        try:
+            s3.head_bucket(Bucket=settings.S3_BUCKET_PRESCRIPTIONS)
+        except ClientError:
+            s3.create_bucket(Bucket=settings.S3_BUCKET_PRESCRIPTIONS)
+            logger.info("S3 bucket created: %s", settings.S3_BUCKET_PRESCRIPTIONS)
+    except Exception as e:
+        logger.warning("Could not ensure S3 bucket: %s", e)
+
+
+def _sanitize_rich_notes(notes: dict | None) -> dict | None:
+    """
+    Sanitize rich notes by removing potentially dangerous HTML/script content.
+    Only allow safe structured text in JSON format.
+    """
+    if notes is None:
+        return None
+    if not isinstance(notes, dict):
+        return None
+
+    def _sanitize_value(val):
+        if isinstance(val, str):
+            # Remove script tags and dangerous HTML
+            import re
+            val = re.sub(r'<script[^>]*>.*?</script>', '', val, flags=re.DOTALL | re.IGNORECASE)
+            val = re.sub(r'on\w+\s*=\s*["\'][^"\']*["\']', '', val, flags=re.IGNORECASE)
+            val = val.replace('<', '<').replace('>', '>')
+            return val[:10000]  # Limit field size
+        if isinstance(val, dict):
+            return {k: _sanitize_value(v) for k, v in val.items()}
+        if isinstance(val, list):
+            return [_sanitize_value(v) for v in val]
+        return val
+
+    return {k: _sanitize_value(v) for k, v in notes.items()}
+
+
+def _compute_signature_hash(record: MedicalRecord) -> str:
+    """
+    Compute an integrity hash from the MedicalRecord's clinical content.
+    This provides a tamper-evident signature for the record.
+    """
+    content = {
+        "id": record.id,
+        "patient_id": record.patient_id,
+        "doctor_id": record.doctor_id,
+        "chief_complaint": record.chief_complaint,
+        "anamnesis": record.anamnesis,
+        "physical_exam": record.physical_exam,
+        "diagnosis": record.diagnosis,
+        "diagnosis_codes": record.diagnosis_codes,
+        "treatment_plan": record.treatment_plan,
+        "observations": record.observations,
+        "rich_notes": record.rich_notes,
+    }
+    raw = json.dumps(content, sort_keys=True, default=str).encode("utf-8")
+    return hashlib.sha256(raw).hexdigest()
+
+
+def _generate_prescription_pdf(rx: Prescription, doctor_name: str = "Médico") -> bytes:
+    """
+    Generate a PDF for a prescription using a simple HTML template.
+    Returns PDF bytes.
+    """
+    medications_html = ""
+    for med in (rx.medications or []):
+        name = med.get("name", "N/A")
+        dosage = med.get("dosage", "N/A")
+        frequency = med.get("frequency", "N/A")
+        duration = med.get("duration_days", "N/A")
+        instructions = med.get("instructions", "")
+        medications_html += f"""
+        <tr>
+            <td>{name}</td>
+            <td>{dosage}</td>
+            <td>{frequency}</td>
+            <td>{duration} dias</td>
+            <td>{instructions}</td>
+        </tr>"""
+
+    import weasyprint
+    html = f"""<!DOCTYPE html>
+<html lang="pt-BR">
+<head><meta charset="utf-8">
+<style>
+    body {{ font-family: Arial, sans-serif; margin: 40px; font-size: 12px; }}
+    .header {{ text-align: center; margin-bottom: 30px; }}
+    .header h1 {{ color: #2563eb; margin: 0; font-size: 20px; }}
+    .header p {{ color: #666; margin: 5px 0; }}
+    .info {{ margin-bottom: 20px; }}
+    .info td {{ padding: 2px 10px; }}
+    table {{ width: 100%; border-collapse: collapse; margin: 20px 0; }}
+    th {{ background: #2563eb; color: white; padding: 10px; text-align: left; }}
+    td {{ border: 1px solid #ddd; padding: 8px; }}
+    .footer {{ margin-top: 50px; text-align: center; color: #999; font-size: 10px; }}
+    .signature {{ margin-top: 80px; }}
+    .signature-line {{ border-top: 1px solid #333; width: 300px; margin: 0 auto; padding-top: 5px; text-align: center; }}
+</style>
+</head><body>
+<div class="header">
+    <h1>PROMPTUÁRIO — Prescrição Médica</h1>
+    <p>ID: {rx.id}</p>
+</div>
+<div class="info">
+    <table><tr><td><strong>Data:</strong> {rx.created_at.strftime('%d/%m/%Y %H:%M')}</td>
+    <td><strong>Validade:</strong> {rx.valid_days} dias</td></tr></table>
+</div>
+<table>
+    <thead><tr><th>Medicamento</th><th>Dosagem</th><th>Frequência</th><th>Duração</th><th>Instruções</th></tr></thead>
+    <tbody>{medications_html}</tbody>
+</table>
+<div class="info">
+    <p><strong>Instruções gerais:</strong> {rx.instructions or 'Nenhuma'}</p>
+</div>
+<div class="signature">
+    <div class="signature-line">{doctor_name}</div>
+</div>
+<div class="footer">
+    <p>Documento gerado eletronicamente pelo sistema Promptuário em {rx.created_at.strftime('%d/%m/%Y às %H:%M')}</p>
+    <p>Hash de integridade: {rx.signature_hash or 'N/A'}</p>
+</div>
+</body></html>"""
+
+    pdf_bytes = weasyprint.HTML(string=html).write_pdf()
+    return pdf_bytes
+
+
+def _upload_pdf_to_s3(rx_id: str, pdf_bytes: bytes) -> str | None:
+    """Upload PDF bytes to S3 and return the S3 key."""
+    try:
+        s3 = _get_s3_client()
+        s3_key = f"prescriptions/{rx_id[:2]}/{rx_id[2:4]}/{rx_id}.pdf"
+        s3.put_object(
+            Bucket=settings.S3_BUCKET_PRESCRIPTIONS,
+            Key=s3_key,
+            Body=pdf_bytes,
+            ContentType="application/pdf",
+        )
+        return s3_key
+    except ClientError as e:
+        logger.error("S3 PDF upload failed: %s", e)
+        return None
+
+
+# ─── Services ─────────────────────────────────────────────────────────────────
 
 
 class AppointmentService:
@@ -131,7 +301,7 @@ class AppointmentService:
 
     async def complete(self, appt_id: str) -> Appointment:
         appt = await self.get(appt_id)
-        if appt.status != "SCHEDULED" and appt.status != "CONFIRMED":
+        if appt.status not in ("SCHEDULED", "CONFIRMED"):
             raise HTTPException(status_code=400, detail="Status inválido para conclusão")
         appt.status = "COMPLETED"
         return await self.repo.update(appt)
@@ -161,9 +331,10 @@ class MedicalRecordService:
             anamnesis=data.anamnesis,
             physical_exam=data.physical_exam,
             diagnosis=data.diagnosis,
-            diagnosis_codes=data.diagnosis_codes,
+            diagnosis_codes=data.diagnosis_codes or [],
             treatment_plan=data.treatment_plan,
             observations=data.observations,
+            rich_notes=_sanitize_rich_notes(data.rich_notes),
         )
         record = await self.repo.create(record)
 
@@ -177,7 +348,7 @@ class MedicalRecordService:
             record_id=record.id,
             changed_by=doctor_id,
             change_type="CREATED",
-            snapshot={"chief_complaint": record.chief_complaint},
+            snapshot={"chief_complaint": record.chief_complaint, "has_rich_notes": record.rich_notes is not None},
         ))
 
         await self.publisher.publish(
@@ -212,7 +383,6 @@ class MedicalRecordService:
         # PATIENT can only view their own records
         if role == "PATIENT":
             from app.infrastructure.repositories.clinical_repository import PatientProjectionRepository
-            # We resolve patient_id from projection or appointment
             if record.patient_id != user_id:
                 raise HTTPException(status_code=403, detail="Acesso negado")
         return record
@@ -231,6 +401,17 @@ class MedicalRecordService:
             if val is not None:
                 setattr(record, field, val)
                 changed[field] = val
+
+        if data.rich_notes is not None:
+            record.rich_notes = _sanitize_rich_notes(data.rich_notes)
+            changed["rich_notes"] = record.rich_notes
+
+        # If signed, invalidate signature on update
+        if record.signature_hash:
+            record.signature_hash = None
+            record.signed_by = None
+            record.signed_at = None
+            changed["signature_invalidated"] = True
 
         record = await self.repo.update(record)
         if changed:
@@ -253,6 +434,47 @@ class MedicalRecordService:
             )
         return record
 
+    async def sign(self, record_id: str, doctor_id: str) -> MedicalRecord:
+        """Digitally sign a medical record by computing and storing its integrity hash."""
+        record = await self.repo.get(record_id)
+        if not record:
+            raise HTTPException(status_code=404, detail="Prontuário não encontrado")
+        if record.doctor_id != doctor_id:
+            raise HTTPException(status_code=403, detail="Apenas o médico responsável pode assinar")
+
+        record.signature_hash = _compute_signature_hash(record)
+        record.signed_by = doctor_id
+        record.signed_at = datetime.now(timezone.utc)
+        record = await self.repo.update(record)
+
+        await self.repo.add_history(MedicalRecordHistory(
+            id=str(uuid.uuid4()),
+            record_id=record.id,
+            changed_by=doctor_id,
+            change_type="SIGNED",
+            snapshot={"signature_hash": record.signature_hash, "signed_at": record.signed_at.isoformat()},
+        ))
+        return record
+
+    async def verify_signature(self, record_id: str) -> dict:
+        """Verify that the stored signature matches a recomputed hash of the current content."""
+        record = await self.repo.get(record_id)
+        if not record:
+            raise HTTPException(status_code=404, detail="Prontuário não encontrado")
+        if not record.signature_hash:
+            return {"verified": False, "reason": "Prontuário não assinado"}
+
+        current_hash = _compute_signature_hash(record)
+        verified = current_hash == record.signature_hash
+        return {
+            "verified": verified,
+            "stored_hash": record.signature_hash,
+            "computed_hash": current_hash,
+            "signed_by": record.signed_by,
+            "signed_at": record.signed_at.isoformat() if record.signed_at else None,
+            "reason": "Integridade confirmada" if verified else "O conteúdo foi alterado após a assinatura",
+        }
+
     async def list_by_patient(self, patient_id: str, page: int, size: int):
         return await self.repo.list_by_patient(patient_id, page, size)
 
@@ -260,9 +482,9 @@ class MedicalRecordService:
 class PrescriptionService:
     def __init__(self, session: AsyncSession, publisher: EventPublisher, s3_client=None):
         self.record_repo = MedicalRecordRepository(session)
+        self.rx_repo = PrescriptionRepository(session)
         self.session = session
         self.publisher = publisher
-        self.s3 = s3_client
 
     async def create(self, record_id: str, data: PrescriptionCreate, doctor_id: str) -> Prescription:
         record = await self.record_repo.get(record_id)
@@ -284,6 +506,39 @@ class PrescriptionService:
         await self.session.flush()
         await self.session.refresh(rx)
 
+        # Generate PDF synchronously (inline) — non-blocking for a single prescription
+        if settings.PDF_GENERATION_ENABLED:
+            try:
+                doctor_name = doctor_id  # Could be enriched from IAM projection
+                pdf_bytes = _generate_prescription_pdf(rx, doctor_name=doctor_name)
+                s3_key = _upload_pdf_to_s3(rx.id, pdf_bytes)
+
+                if s3_key:
+                    rx.pdf_s3_key = s3_key
+                    rx.pdf_generated_at = datetime.now(timezone.utc)
+                    rx.signature_hash = hashlib.sha256(pdf_bytes).hexdigest()
+                    rx.signed_by = doctor_id
+                    rx.signed_at = datetime.now(timezone.utc)
+
+                    await self.session.flush()
+                    await self.session.refresh(rx)
+                    logger.info("Prescription PDF generated: rx=%s, s3_key=%s", rx.id, s3_key)
+            except Exception as e:
+                logger.error("Prescription PDF generation failed (non-fatal): %s", e)
+
+        # Audit trail
+        await self.rx_repo.add_history(PrescriptionHistory(
+            id=str(uuid.uuid4()),
+            prescription_id=rx.id,
+            record_id=record_id,
+            changed_by=doctor_id,
+            change_type="CREATED",
+            snapshot={
+                "medications_count": len(rx.medications),
+                "has_pdf": rx.pdf_s3_key is not None,
+            },
+        ))
+
         await log_operation(
             self.session,
             service="clinical-service",
@@ -295,11 +550,12 @@ class PrescriptionService:
             new_values={
                 "record_id": record_id,
                 "medications_count": len(rx.medications),
+                "has_pdf": rx.pdf_s3_key is not None,
             },
         )
         await self.session.commit()
 
-        # Publish event — PDF generation is async (worker picks this up)
+        # Publish event
         await self.publisher.publish(
             PrescriptionGeneratedEvent(
                 prescription_id=rx.id,
@@ -307,14 +563,39 @@ class PrescriptionService:
                 patient_id=record.patient_id,
                 doctor_id=doctor_id,
                 medications=rx.medications,
+                pdf_s3_key=rx.pdf_s3_key,
             )
         )
         return rx
+
+    async def get_pdf_download_url(self, prescription_id: str) -> str:
+        rx = await self.rx_repo.get(prescription_id)
+        if not rx:
+            raise HTTPException(status_code=404, detail="Prescrição não encontrada")
+        if not rx.pdf_s3_key:
+            raise HTTPException(status_code=400, detail="PDF ainda não foi gerado para esta prescrição")
+
+        try:
+            s3 = _get_s3_client()
+            url = s3.generate_presigned_url(
+                "get_object",
+                Params={
+                    "Bucket": settings.S3_BUCKET_PRESCRIPTIONS,
+                    "Key": rx.pdf_s3_key,
+                    "ResponseContentDisposition": f'inline; filename="prescricao_{rx.id}.pdf"',
+                },
+                ExpiresIn=settings.S3_PRESIGNED_URL_EXPIRY,
+            )
+            return url
+        except ClientError as e:
+            logger.error("S3 pre-signed URL generation failed: %s", e)
+            raise HTTPException(status_code=500, detail="Falha ao gerar URL de download do PDF")
 
 
 class ExamRequestService:
     def __init__(self, session: AsyncSession):
         self.record_repo = MedicalRecordRepository(session)
+        self.exam_repo = ExamRequestRepository(session)
         self.session = session
 
     async def create(self, record_id: str, data: ExamRequestCreate, doctor_id: str) -> ExamRequest:
@@ -336,6 +617,19 @@ class ExamRequestService:
         self.session.add(exam)
         await self.session.flush()
         await self.session.refresh(exam)
+
+        # Audit trail
+        await self.exam_repo.add_history(ExamRequestHistory(
+            id=str(uuid.uuid4()),
+            exam_id=exam.id,
+            record_id=record_id,
+            changed_by=doctor_id,
+            change_type="CREATED",
+            snapshot={
+                "exam_type": exam.exam_type,
+                "urgency": exam.urgency,
+            },
+        ))
         await self.session.commit()
         return exam
 
@@ -350,7 +644,22 @@ class ExamRequestService:
         exam = result.scalar_one_or_none()
         if not exam:
             raise HTTPException(status_code=404, detail="Solicitação de exame não encontrada")
+
+        old_result = exam.result
         exam.result = data.result
         exam.result_date = data.result_date or datetime.now(timezone.utc)
         await self.session.flush()
+
+        # Audit trail
+        await self.exam_repo.add_history(ExamRequestHistory(
+            id=str(uuid.uuid4()),
+            exam_id=exam.id,
+            record_id=record_id,
+            changed_by=doctor_id,
+            change_type="RESULT_RECORDED",
+            snapshot={
+                "has_result": bool(data.result),
+                "result_date": exam.result_date.isoformat() if exam.result_date else None,
+            },
+        ))
         return exam

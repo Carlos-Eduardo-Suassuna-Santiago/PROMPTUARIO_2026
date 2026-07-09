@@ -125,6 +125,14 @@ class MedicalRecord(Base):
     treatment_plan: Mapped[str | None] = mapped_column(Text, nullable=True)
     observations: Mapped[str | None] = mapped_column(Text, nullable=True)
 
+    # Rich structured notes — sanitized JSON with sections
+    rich_notes: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+
+    # Digital signature for integrity verification
+    signature_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    signed_by: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    signed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
     ai_analysis_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
@@ -158,6 +166,8 @@ class MedicalRecordHistory(Base):
     record: Mapped[MedicalRecord] = relationship("MedicalRecord", back_populates="history")
 
 
+# ─── Prescriptions ────────────────────────────────────────────────────────────
+
 class Prescription(Base):
     __tablename__ = "prescriptions"
 
@@ -170,11 +180,37 @@ class Prescription(Base):
     medications: Mapped[list] = mapped_column(JSON, default=list)
     instructions: Mapped[str | None] = mapped_column(Text, nullable=True)
     valid_days: Mapped[int] = mapped_column(Integer, default=30)
+
+    # PDF generation
     pdf_s3_key: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    pdf_generated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    # Digital signature
+    signature_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    signed_by: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    signed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
     record: Mapped[MedicalRecord] = relationship("MedicalRecord", back_populates="prescriptions")
 
+
+class PrescriptionHistory(Base):
+    """Immutable audit trail for prescription changes."""
+    __tablename__ = "prescription_history"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    prescription_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("prescriptions.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    record_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    changed_by: Mapped[str] = mapped_column(String(36), nullable=False)
+    change_type: Mapped[str] = mapped_column(String(50), nullable=False)
+    snapshot: Mapped[dict] = mapped_column(JSON, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
+# ─── Exam Requests ────────────────────────────────────────────────────────────
 
 class ExamRequest(Base):
     __tablename__ = "exam_requests"
@@ -193,6 +229,29 @@ class ExamRequest(Base):
     instructions: Mapped[str | None] = mapped_column(Text, nullable=True)
     result: Mapped[str | None] = mapped_column(Text, nullable=True)
     result_date: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    # Audit trail
+    history: Mapped[list["ExamRequestHistory"]] = relationship(
+        "ExamRequestHistory", back_populates="exam", cascade="all, delete-orphan"
+    )
+
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
     record: Mapped[MedicalRecord] = relationship("MedicalRecord", back_populates="exam_requests")
+
+
+class ExamRequestHistory(Base):
+    """Immutable audit trail for exam request changes."""
+    __tablename__ = "exam_request_history"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    exam_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("exam_requests.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    record_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    changed_by: Mapped[str] = mapped_column(String(36), nullable=False)
+    change_type: Mapped[str] = mapped_column(String(50), nullable=False)
+    snapshot: Mapped[dict] = mapped_column(JSON, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+    exam: Mapped[ExamRequest] = relationship("ExamRequest", back_populates="history")
