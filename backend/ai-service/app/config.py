@@ -1,15 +1,9 @@
-"""AI Service — complete single-file implementation for clarity."""
-# ─── config.py ───────────────────────────────────────────────────────────────
+"""AI Service configuration."""
 from __future__ import annotations
 
-import json
 import logging
 import sys
-import uuid
-from datetime import datetime, timezone
-from typing import Any, Literal, Optional
 
-from pydantic import BaseModel, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -26,9 +20,28 @@ class Settings(BaseSettings):
     JWT_SECRET_KEY: str = "change-me-in-production"
     JWT_ALGORITHM: str = "HS256"
 
+    # LLM configuration
     LLM_API_KEY: str = ""
     LLM_MODEL: str = "gpt-4o-mini"
     LLM_MAX_TOKENS: int = 1000
+    LLM_TEMPERATURE: float = 0.1
+    LLM_TIMEOUT_SECONDS: int = 60
+
+    # Retry configuration
+    LLM_RETRY_MAX_ATTEMPTS: int = 3
+    LLM_RETRY_MIN_WAIT: int = 2
+    LLM_RETRY_MAX_WAIT: int = 30
+
+    # Circuit breaker
+    CIRCUIT_BREAKER_FAILURE_THRESHOLD: int = 5
+    CIRCUIT_BREAKER_RECOVERY_TIMEOUT: int = 60
+
+    # Cache
+    CACHE_ENABLED: bool = True
+    LLM_CACHE_TTL_SECONDS: int = 3600  # 1h
+
+    # Analysis
+    ANALYSIS_TIMEOUT_SECONDS: int = 120  # total timeout including retries
 
 
 settings = Settings()
