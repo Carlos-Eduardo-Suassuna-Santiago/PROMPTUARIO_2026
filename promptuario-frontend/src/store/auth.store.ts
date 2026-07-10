@@ -1,6 +1,5 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
-import { jwtDecode } from 'jwt-decode'
 import { TokenPayload, User, Role } from '@/types'
 import { tokenStorage } from '@/api/client'
 import { authApi } from '@/api/services'
