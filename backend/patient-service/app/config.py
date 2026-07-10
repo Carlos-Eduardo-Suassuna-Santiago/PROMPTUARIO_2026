@@ -14,5 +14,26 @@ class Settings(BaseSettings):
     JWT_SECRET_KEY: str = "change-me-in-production"
     JWT_ALGORITHM: str = "HS256"
 
+    # MinIO / S3-compatible storage for patient documents
+    S3_ENDPOINT: str = "http://localhost:9000"
+    S3_ACCESS_KEY: str = "minioadmin"
+    S3_SECRET_KEY: str = "minioadmin"
+    S3_BUCKET_PATIENT_DOCUMENTS: str = "patient-documents"
+    S3_REGION: str = "us-east-1"
+    S3_PRESIGNED_URL_EXPIRY: int = 300  # seconds
+
+    # Upload limits
+    MAX_DOCUMENT_SIZE_MB: int = 50
+    ALLOWED_DOCUMENT_MIME_TYPES: list[str] = [
+        "application/pdf",
+        "image/jpeg",
+        "image/png",
+        "image/tiff",
+        "application/msword",
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "text/plain",
+        "text/csv",
+    ]
+
 
 settings = Settings()

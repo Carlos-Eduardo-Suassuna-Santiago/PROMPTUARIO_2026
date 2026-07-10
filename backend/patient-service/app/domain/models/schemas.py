@@ -59,6 +59,18 @@ class MedicationCreate(BaseModel):
     notes: str | None = None
 
 
+class MedicationUpdate(BaseModel):
+    dosage: str | None = Field(None, min_length=1, max_length=100)
+    frequency: str | None = Field(None, min_length=1, max_length=100)
+    prescribing_doctor: str | None = None
+    notes: str | None = None
+
+
+class MedicationDeactivate(BaseModel):
+    ended_at: date | None = None
+    end_reason: str | None = Field(None, max_length=255)
+
+
 class MedicationResponse(BaseModel):
     id: str
     patient_id: str
@@ -67,10 +79,80 @@ class MedicationResponse(BaseModel):
     frequency: str
     prescribing_doctor: str | None
     started_at: date | None
+    ended_at: date | None
+    end_reason: str | None
     active: bool
+    version: int
     notes: str | None
     created_at: datetime
+    updated_at: datetime
     model_config = {"from_attributes": True}
+
+
+class MedicationHistoryResponse(BaseModel):
+    id: str
+    patient_id: str
+    medication_id: str | None
+    name: str
+    dosage: str
+    frequency: str
+    prescribing_doctor: str | None
+    started_at: date | None
+    ended_at: date | None
+    end_reason: str | None
+    active: bool
+    version: int
+    change_type: str
+    changed_by: str | None
+    created_at: datetime
+    model_config = {"from_attributes": True}
+
+
+# ─── Patient Document ────────────────────────────────────────────────────────
+
+class DocumentUploadResponse(BaseModel):
+    id: str
+    patient_id: str
+    document_type: str
+    file_name: str
+    s3_key: str
+    file_size: int
+    mime_type: str
+    file_hash: str | None
+    description: str | None
+    uploaded_by: str | None
+    is_active: bool
+    created_at: datetime
+    model_config = {"from_attributes": True}
+
+
+class DocumentResponse(BaseModel):
+    id: str
+    patient_id: str
+    document_type: str
+    file_name: str
+    file_size: int
+    mime_type: str
+    file_hash: str | None
+    description: str | None
+    uploaded_by: str | None
+    is_active: bool
+    created_at: datetime
+    updated_at: datetime
+    deleted_at: datetime | None
+    model_config = {"from_attributes": True}
+
+
+class DocumentListResponse(BaseModel):
+    items: list[DocumentResponse]
+    total: int
+    page: int
+    size: int
+
+
+class DocumentDownloadResponse(BaseModel):
+    download_url: str
+    expires_in_seconds: int = 300
 
 
 # ─── Patient ─────────────────────────────────────────────────────────────────
