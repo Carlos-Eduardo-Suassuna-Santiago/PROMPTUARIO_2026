@@ -16,37 +16,6 @@ def _get_services(request: Request):
     return request.app.state.session_factory, request.app.state.publisher, request.app.state.redis
 
 
-@oauth_router.get("/github", summary="Iniciar login com GitHub")
-async def github_login(request: Request):
-    sf, pub, redis = _get_services(request)
-    async with sf() as session:
-        svc = OAuthService(session, pub, redis)
-        url = await svc.get_github_auth_url()
-    return RedirectResponse(url=url, status_code=302)
-
-
-@oauth_router.get("/github/callback", summary="Callback GitHub OAuth")
-async def github_callback(
-    request: Request,
-    code: str = Query(..., description="Authorization code do GitHub"),
-    state: str = Query(..., description="State CSRF"),
-):
-    sf, pub, redis = _get_services(request)
-    async with sf() as session:
-        svc = OAuthService(session, pub, redis)
-        tokens = await svc.handle_github_callback(code, state)
-
-    # Redireciona para o frontend com os tokens na query string
-    # O frontend captura em /auth/callback e salva no localStorage
-    frontend_url = settings.FRONTEND_CALLBACK_URL
-    redirect = (
-        f"{frontend_url}"
-        f"?access_token={tokens['access_token']}"
-        f"&refresh_token={tokens['refresh_token']}"
-    )
-    return RedirectResponse(url=redirect, status_code=302)
-
-
 @oauth_router.get("/google", summary="Iniciar login com Google")
 async def google_login(request: Request):
     sf, pub, redis = _get_services(request)

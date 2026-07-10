@@ -243,7 +243,7 @@ async def create_prescription(record_id: str, body: PrescriptionCreate, request:
     response_model=PrescriptionPdfDownloadResponse,
     dependencies=[Depends(require_roles("DOCTOR", "ADMIN", "ATTENDANT"))],
 )
-async def download_prescription_pdf(record_id: str, prescription_id: str, request: Request):
+async def download_prescription_pdf_url(record_id: str, prescription_id: str, request: Request):
     """Get a pre-signed S3 URL to download the prescription PDF."""
     async with _sf(request)() as session:
         svc = PrescriptionService(session, _pub(request))
@@ -276,6 +276,53 @@ async def get_prescription_history(record_id: str, prescription_id: str, request
             .order_by(PrescriptionHistory.created_at.desc())
         )
         return [PrescriptionHistoryResponse.model_validate(h) for h in result.scalars().all()]
+
+
+@records_router.get(
+    "/{record_id}/prescriptions/{prescription_id}/pdf",
+    summary="Download do PDF da prescrição",
+)
+async def download_prescription_pdf(
+    record_id: str,
+    prescription_id: str,
+    request: Request,
+    user=Depends(get_current_user),
+):
+    import boto3 as _boto3
+    from sqlalchemy import select
+    from app.domain.models.clinical import Prescription as _Prescription
+    from fastapi.responses import JSONResponse, RedirectResponse
+
+    async with _sf(request)() as session:
+        result = await session.execute(
+            select(_Prescription).where(
+                _Prescription.id == prescription_id,
+                _Prescription.record_id == record_id,
+            )
+        )
+        rx = result.scalar_one_or_none()
+
+    if not rx:
+        raise HTTPException(status_code=404, detail="Prescrição não encontrada")
+
+    if not rx.pdf_s3_key:
+        return JSONResponse(
+            status_code=202,
+            content={"detail": "PDF ainda está sendo gerado. Tente novamente em alguns segundos."},
+        )
+
+    s3 = _boto3.client(
+        "s3",
+        endpoint_url=_settings.S3_ENDPOINT,
+        aws_access_key_id=_settings.S3_ACCESS_KEY,
+        aws_secret_access_key=_settings.S3_SECRET_KEY,
+    )
+    url = s3.generate_presigned_url(
+        "get_object",
+        Params={"Bucket": _settings.S3_BUCKET_PRESCRIPTIONS, "Key": rx.pdf_s3_key},
+        ExpiresIn=300,
+    )
+    return RedirectResponse(url=url, status_code=302)
 
 
 # ─── Exam Requests ────────────────────────────────────────────────────────────

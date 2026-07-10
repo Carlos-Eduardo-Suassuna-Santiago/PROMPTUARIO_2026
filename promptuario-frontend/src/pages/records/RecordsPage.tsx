@@ -330,11 +330,31 @@ function RecordDetailView({ recordId }: { recordId: string }) {
               <div key={rx.id} className="p-4 bg-slate-950/60 rounded-xl border border-slate-800/60">
                 <div className="flex items-center justify-between mb-3">
                   <span className="text-xs text-slate-500">{formatDate(rx.created_at)} · Válida por {rx.valid_days} dias</span>
-                  {rx.pdf_s3_key && (
-                    <Button size="sm" variant="ghost" icon={<Download className="w-3.5 h-3.5" />}>
-                      PDF
-                    </Button>
-                  )}
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    icon={<Download className="w-3.5 h-3.5" />}
+                    onClick={async () => {
+                      try {
+                        const blob = await recordsApi.downloadPrescription(record.id, rx.id)
+                        const url = window.URL.createObjectURL(blob as Blob)
+                        const a = document.createElement('a')
+                        a.href = url
+                        a.download = `prescricao-${rx.id.slice(0, 8)}.pdf`
+                        a.click()
+                        window.URL.revokeObjectURL(url)
+                      } catch (err) {
+                        const msg = getErrorMessage(err)
+                        if (msg.includes('202') || msg.includes('gerado')) {
+                          alert('PDF ainda está sendo gerado. Tente novamente em alguns segundos.')
+                        } else {
+                          alert('Erro ao baixar PDF: ' + msg)
+                        }
+                      }
+                    }}
+                  >
+                    PDF
+                  </Button>
                 </div>
                 <div className="space-y-2">
                   {rx.medications.map((med, i) => (

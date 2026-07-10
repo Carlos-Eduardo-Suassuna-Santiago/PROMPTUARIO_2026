@@ -13,9 +13,17 @@ from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
+
+logger = logging.getLogger(__name__)
 from app.domain.models.clinical import (
-    Appointment, ExamRequest, ExamRequestHistory, MedicalRecord,
-    MedicalRecordHistory, Prescription, PrescriptionHistory,
+    Appointment,
+    ExamRequest,
+    ExamRequestHistory,
+    MedicalRecord,
+    MedicalRecordHistory,
+    PatientProjection,
+    Prescription,
+    PrescriptionHistory,
 )
 from app.domain.models.schemas import (
     AppointmentCreate, AppointmentCancelRequest,
@@ -502,6 +510,19 @@ class PrescriptionService:
             instructions=data.instructions,
             valid_days=data.valid_days,
         )
+        # Buscar nome do paciente ANTES do commit (a sessão expira após commit)
+        patient_name = "Paciente"
+        try:
+            from sqlalchemy import select as _select
+            proj_result = await self.session.execute(
+                _select(PatientProjection).where(PatientProjection.id == record.patient_id)
+            )
+            proj = proj_result.scalar_one_or_none()
+            if proj:
+                patient_name = proj.full_name
+        except Exception:
+            logger.warning("Não foi possível buscar nome do paciente para prescrição %s", rx.id)
+
         self.session.add(rx)
         await self.session.flush()
         await self.session.refresh(rx)
@@ -566,6 +587,22 @@ class PrescriptionService:
                 pdf_s3_key=rx.pdf_s3_key,
             )
         )
+
+        # Disparar geração assíncrona do PDF via Celery (já tem o nome do paciente)
+        try:
+            from app.workers.prescription_tasks import generate_prescription_pdf
+
+            generate_prescription_pdf.delay(
+                prescription_id=rx.id,
+                patient_name=patient_name,
+                doctor_name=doctor_id,
+                medications=rx.medications,
+                instructions=rx.instructions,
+                valid_days=rx.valid_days,
+            )
+        except Exception:
+            logger.exception("Falha ao disparar task Celery para prescrição %s", rx.id)
+
         return rx
 
     async def get_pdf_download_url(self, prescription_id: str) -> str:
