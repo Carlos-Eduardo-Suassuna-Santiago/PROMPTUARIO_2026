@@ -82,7 +82,7 @@ async def list_analyses(record_id: str, request: Request):
 app = FastAPI(
     title="PROMPTUARIO — AI Service",
     description="Análise clínica com IA: interações medicamentosas, sintomas, resumos",
-    version="1.0.0",
+    version="1.1.0",
 )
 
 app.add_middleware(
@@ -107,6 +107,7 @@ async def startup():
     await app.state.db.analysis_jobs.create_index("patient_id")
     await app.state.db.analysis_jobs.create_index("record_id")
     await app.state.db.analysis_jobs.create_index("status")
+    await app.state.db.analysis_jobs.create_index("created_at")
 
     # Redis
     import redis.asyncio as aioredis
@@ -190,12 +191,13 @@ def _make_prescription_handler(db, redis_client, publisher):
 
 @app.get("/healthz", tags=["Health"])
 async def health(request: Request):
-    # Tenta obter o estado do circuit breaker se houver um cliente ativo
     circuit_state = "N/A"
+    llm_metrics = {}
     try:
         svc = AIService(request.app.state.db)
         client = svc._get_llm_client()
         circuit_state = client.state
+        llm_metrics = client.metrics
     except Exception:
         pass
     return {
@@ -204,4 +206,5 @@ async def health(request: Request):
         "llm_configured": bool(settings.LLM_API_KEY),
         "llm_model": settings.LLM_MODEL,
         "circuit_breaker": circuit_state,
+        "llm_metrics": llm_metrics,
     }
