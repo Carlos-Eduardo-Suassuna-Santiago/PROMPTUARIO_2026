@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { useNavigate, useLocation } from 'react-router-dom'
+import { useNavigate, useLocation, Link } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -168,6 +168,15 @@ export function LoginPage() {
             >
               {isLoading ? 'Entrando…' : 'Entrar'}
             </Button>
+
+            <div className="flex items-center justify-between text-sm">
+              <Link to="/forgot-password" className="text-brand-400 hover:text-brand-300 transition-colors">
+                Esqueci minha senha
+              </Link>
+              <Link to="/auth/2fa" state={{ email: 'admin@promptuario.health' }} className="text-slate-500 hover:text-slate-300 transition-colors">
+                Validar 2FA
+              </Link>
+            </div>
           </form>
 
           {/* OAuth divider */}
