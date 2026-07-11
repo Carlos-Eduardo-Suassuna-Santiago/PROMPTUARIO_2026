@@ -1,4 +1,4 @@
-.PHONY: help up down logs build restart test lint clean seed
+.PHONY: help up down logs build restart test lint clean seed backup backup-once restore-db restore-mongo status
 
 # ─── Config ───────────────────────────────────────────────────────────────────
 COMPOSE = docker compose
@@ -126,6 +126,20 @@ login: ## Quick login test (returns JWT)
 seed: ## Populate database with realistic simulated data (500 users)
 	python scripts/seed_db.py
 
+backup: ## Start the backup service (scheduled mode)
+	$(COMPOSE) up -d backup-service
+
+backup-once: ## Run a single backup cycle immediately
+	$(COMPOSE) run --rm backup-service python backup_runner.py --once
+
+restore-db: ## Restore PostgreSQL from a local backup file. Usage: make restore-db FILE=path/to/file.sql.gz TARGET=iam_db
+	$(COMPOSE) run --rm backup-service python backup_runner.py --restore --kind postgres --file $(FILE) --target $(TARGET)
+
+restore-mongo: ## Restore MongoDB from a local backup archive. Usage: make restore-mongo FILE=path/to/file.archive.gz TARGET=ai_db
+	$(COMPOSE) run --rm backup-service python backup_runner.py --restore --kind mongo --file $(FILE) --target $(TARGET)
+
+status: ## Show the latest backup status report
+	@$(COMPOSE) exec -T backup-service sh -lc 'cat /var/backups/status.json 2>/dev/null || echo "Nenhum status disponível"'
 
 clean: ## Remove containers, volumes, and built images
 	$(COMPOSE) down -v --rmi local
