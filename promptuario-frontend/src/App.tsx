@@ -13,6 +13,12 @@ const LoginPage = lazy(() =>
 const OAuthCallback = lazy(() =>
   import('@/pages/auth/OAuthCallback').then((m) => ({ default: m.OAuthCallback }))
 )
+const ForgotPasswordPage = lazy(() =>
+  import('@/pages/auth/ForgotPasswordPage').then((m) => ({ default: m.ForgotPasswordPage }))
+)
+const TwoFactorPage = lazy(() =>
+  import('@/pages/auth/TwoFactorPage').then((m) => ({ default: m.TwoFactorPage }))
+)
 const DashboardPage = lazy(() =>
   import('@/pages/dashboard/DashboardPage').then((m) => ({ default: m.DashboardPage }))
 )
@@ -73,6 +79,8 @@ function AppRoutes() {
       <Routes>
         {/* Public */}
         <Route path="/login" element={<LoginPage />} />
+        <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+        <Route path="/auth/2fa" element={<TwoFactorPage />} />
         <Route path="/auth/callback" element={<OAuthCallback />} />
 
         {/* Protected — requires auth */}
