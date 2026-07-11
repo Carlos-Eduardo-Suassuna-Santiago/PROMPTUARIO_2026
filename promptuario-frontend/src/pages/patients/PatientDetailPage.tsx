@@ -5,7 +5,7 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import {
   ArrowLeft, UserRound, Phone, MapPin, Heart,
-  Syringe, Pill, Calendar, Plus, Trash2, AlertTriangle,
+  Syringe, Pill, Calendar, Plus, Trash2, AlertTriangle, FileText,
 } from 'lucide-react'
 import {
   usePatient, usePatientAllergies, usePatientVaccines,
@@ -247,6 +247,7 @@ export function PatientDetailPage() {
               <EmptyState
                 icon={<AlertTriangle className="w-7 h-7" />}
                 title="Nenhuma alergia registrada"
+                description="Registre sensibilidades ou reações para reforçar a segurança clínica do atendimento."
                 action={canEdit ? (
                   <Button size="sm" icon={<Plus className="w-3.5 h-3.5" />} onClick={() => setAllergyModal(true)}>
                     Adicionar Alergia
@@ -301,7 +302,11 @@ export function PatientDetailPage() {
           </CardHeader>
           {!vaccines?.length ? (
             <CardBody>
-              <EmptyState icon={<Syringe className="w-7 h-7" />} title="Nenhuma vacina registrada" />
+              <EmptyState
+                icon={<Syringe className="w-7 h-7" />}
+                title="Nenhuma vacina registrada"
+                description="O histórico vacinal poderá aparecer aqui após o cadastro do paciente."
+              />
             </CardBody>
           ) : (
             <Table>
@@ -335,7 +340,11 @@ export function PatientDetailPage() {
           </CardHeader>
           {!medications?.length ? (
             <CardBody>
-              <EmptyState icon={<Pill className="w-7 h-7" />} title="Nenhum medicamento contínuo" />
+              <EmptyState
+                icon={<Pill className="w-7 h-7" />}
+                title="Nenhum medicamento contínuo"
+                description="Os tratamentos em uso aparecerão aqui para acompanhamento clínico."
+              />
             </CardBody>
           ) : (
             <Table>
@@ -373,7 +382,11 @@ export function PatientDetailPage() {
           </CardHeader>
           {!appointments?.items.length ? (
             <CardBody>
-              <EmptyState icon={<Calendar className="w-7 h-7" />} title="Nenhuma consulta registrada" />
+              <EmptyState
+                icon={<Calendar className="w-7 h-7" />}
+                title="Nenhuma consulta registrada"
+                description="As consultas futuras e passadas vinculadas ao paciente aparecerão aqui."
+              />
             </CardBody>
           ) : (
             <Table>
