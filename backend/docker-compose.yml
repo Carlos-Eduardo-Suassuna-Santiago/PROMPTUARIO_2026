@@ -422,6 +422,7 @@ services:
       MINIO_BACKUP_BUCKET: backups
       BACKUP_RETENTION_DAYS: "7"
       BACKUP_SCHEDULE_HOURS: "24"
+      BACKUP_ROOT_DIR: /var/backups
     depends_on:
       db-iam:
         condition: service_healthy
@@ -451,5 +452,6 @@ volumes:
   redis_data:
   rabbitmq_data:
   minio_data:
+  backup_data:
   prometheus_data:
   grafana_data:
