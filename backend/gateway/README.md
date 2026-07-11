@@ -35,7 +35,8 @@ Esse serviço existe para simplificar o acesso ao sistema. Em vez de o cliente p
 - protege a API contra excesso de requisições (rate limiting);
 - encaminha rotas para os serviços corretos;
 - centraliza o acesso a todas as funcionalidades;
-- agrega health checks de todos os microsserviços.
+- agrega health checks de todos os microsserviços;
+- adiciona resiliência com circuit breaker, cache seletivo e compressão gzip.
 
 ## Stack técnica
 
@@ -128,15 +129,28 @@ curl http://localhost:8000/healthz
 | `JWT_SECRET_KEY`             | Chave secreta JWT (≥32 caracteres)     | *obrigatório* |
 | `JWT_ALGORITHM`              | Algoritmo JWT                          | `HS256`       |
 | `REDIS_URL`                  | URL de conexão com Redis               | —             |
-| `RATE_LIMIT_ANON_PER_MINUTE` | Limite anônimo por minuto              | 10            |
-| `RATE_LIMIT_AUTH_PER_MINUTE` | Limite autenticado por minuto          | 60            |
+| `RATE_LIMIT_ANON_PER_MINUTE` | Limite anônimo por minuto              | 30            |
+| `RATE_LIMIT_AUTH_PER_MINUTE` | Limite autenticado por minuto          | 300           |
+| `RATE_LIMIT_API_KEY_PER_MINUTE` | Limite por API key por minuto      | 120           |
+| `CACHE_TTL_SECONDS`          | TTL do cache de respostas GET          | 60            |
+| `CIRCUIT_BREAKER_FAILURE_THRESHOLD` | Falhas consecutivas para abrir o circuito | 3 |
+| `CIRCUIT_BREAKER_RESET_TIMEOUT_SECONDS` | Tempo antes de tentar fechar o circuito novamente | 30 |
 
 ## Como validar o funcionamento
 
 - acesse `http://localhost:8000/healthz`;
 - verifique `http://localhost:8000/healthz/services` para status agregado;
 - teste um login para confirmar o roteamento para IAM;
+- use `Accept-Encoding: gzip` para confirmar compressão em respostas grandes;
+- envie `X-Api-Key` em integrações externas para validar rate limiting complementar;
 - consulte a documentação interativa em `http://localhost:8000/docs`.
+
+## Comportamento esperado
+
+- Um downstream indisponível não derruba o gateway inteiro: o circuit breaker abre e devolve `503` com cabeçalho `X-Circuit-Breaker: open`.
+- Rotas GET seletivamente cacheáveis retornam respostas consistentes por até `CACHE_TTL_SECONDS` segundos.
+- Respostas grandes com `Accept-Encoding: gzip` são compactadas sem afetar autenticação ou conteúdo binário.
+- O rate limiting por API key é opcional e complementar ao JWT, sem substituir a autenticação do usuário.
 
 ## Testes
 
