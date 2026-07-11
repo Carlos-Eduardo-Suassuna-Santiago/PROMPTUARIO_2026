@@ -88,7 +88,8 @@ def test_backup_runner_logic() -> None:
 
     # Funções principais
     for fn in ["get_s3_client", "ensure_bucket", "upload_to_s3",
-               "backup_postgres", "backup_mongo", "cleanup_old_backups", "run_all_backups"]:
+               "backup_postgres", "backup_mongo", "cleanup_old_backups",
+               "write_status_report", "restore_postgres", "restore_mongo", "run_all_backups"]:
         check(f"Função {fn}() definida", f"def {fn}" in runner)
 
     # 4 bancos PostgreSQL
@@ -105,9 +106,12 @@ def test_backup_runner_logic() -> None:
     for var in ["MINIO_ENDPOINT", "MINIO_ACCESS_KEY", "MINIO_SECRET_KEY", "MINIO_BACKUP_BUCKET"]:
         check(f"Variável {var} lida de env var", var in runner)
 
-    # Retenção e agendamento
+    # Retenção, armazenamento local e agendamento
     check("BACKUP_RETENTION_DAYS lido de env var (padrão 7)", "BACKUP_RETENTION_DAYS" in runner)
     check("BACKUP_SCHEDULE_HOURS lido de env var (padrão 24)", "BACKUP_SCHEDULE_HOURS" in runner)
+    check("BACKUP_ROOT_DIR configurado para volume persistente", "BACKUP_ROOT_DIR" in runner)
+    check("Manifesto de status gravado localmente", "status.json" in runner or "write_status_report" in runner)
+    check("Modo manual/once suportado via CLI", "--once" in runner or "argparse" in runner)
 
     # Timeout de 10 minutos
     check("Timeout de 600s (10min) para pg_dump", "timeout=600" in runner)
@@ -137,6 +141,7 @@ def test_backup_runner_logic() -> None:
     check("run_all_backups chama backup_mongo", "backup_mongo" in runner)
     check("run_all_backups chama cleanup_old_backups", "cleanup_old_backups()" in runner)
     check("run_all_backups gera relatório JSON", "json.dumps(results)" in runner)
+    check("run_all_backups escreve status em arquivo JSON", "write_status_report" in runner)
 
     # Agendamento
     check("schedule.every().hours.do() presente", "schedule.every" in runner)
