@@ -57,7 +57,7 @@ Este microsserviço existe para manter os dados do paciente organizados e acess�
 
 - PostgreSQL disponível
 - RabbitMQ disponível
-- Python 3.11+
+- Python 3.12+
 
 ## Início rápido
 
@@ -73,7 +73,7 @@ uvicorn app.main:app --reload --port 8002
 
 ```bash
 cd backend
-docker-compose up --build patient-service
+docker compose up --build patient-service
 ```
 
 ## Endpoints principais
