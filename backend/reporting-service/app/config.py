@@ -24,5 +24,38 @@ class Settings(BaseSettings):
     PATIENT_DB_URL: str = "postgresql://patient:patient_pass@db-patient:5432/patient_db"
     CLINICAL_DB_URL: str = "postgresql://clinical:clinical_pass@db-clinical:5432/clinical_db"
 
+    # --- New: Webhook & Scheduling ---
+    WEBHOOK_SIGNING_SECRET: str = "reporting-webhook-secret-change-me"
+    CELERY_BEAT_SCHEDULE_FILENAME: str = "/tmp/celerybeat-schedule"
+    CUSTOM_SQL_TEMPLATES: dict = {
+        "consultations_by_doctor": """
+            SELECT doctor_id, stat_date, value AS consultations
+            FROM daily_stats
+            WHERE stat_type = 'DOCTOR_CONSULTATIONS'
+              AND stat_date BETWEEN :from_date AND :to_date
+            ORDER BY stat_date DESC, doctor_id
+        """,
+        "patient_growth": """
+            SELECT stat_date, value AS new_patients
+            FROM daily_stats
+            WHERE stat_type = 'NEW_PATIENTS'
+              AND stat_date BETWEEN :from_date AND :to_date
+            ORDER BY stat_date DESC
+        """,
+        "cancellation_rate": """
+            SELECT
+                c.stat_date,
+                c.value AS consultations,
+                x.value AS cancellations,
+                ROUND(100.0 * x.value / NULLIF(c.value, 0), 2) AS cancel_pct
+            FROM daily_stats c
+            LEFT JOIN daily_stats x
+                ON x.stat_date = c.stat_date AND x.stat_type = 'CANCELLATIONS'
+            WHERE c.stat_type = 'CONSULTATIONS'
+              AND c.stat_date BETWEEN :from_date AND :to_date
+            ORDER BY c.stat_date DESC
+        """,
+    }
+
 
 settings = Settings()

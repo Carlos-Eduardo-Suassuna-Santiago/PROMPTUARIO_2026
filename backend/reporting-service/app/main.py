@@ -17,7 +17,30 @@ from pydantic import BaseModel
 from sqlalchemy import func, select, text
 
 from app.config import settings
-from app.domain.models.report import DailyStats, ReportJob
+from app.domain.models.report import (
+    DailyStats,
+    ReportJob,
+    ReportSchedule,
+    WebhookConfig,
+    WebhookDeliveryLog,
+    ReportAuditLog,
+)
+from app.schemas import (
+    ScheduleCreate,
+    ScheduleUpdate,
+    ScheduleResponse,
+    ScheduleListResponse,
+    WebhookConfigCreate,
+    WebhookConfigUpdate,
+    WebhookConfigResponse,
+    WebhookDeliveryLogResponse,
+    ReportExportRequest,
+    CustomReportRequest,
+    MultiSheetExportRequest,
+    ReportJobResponse,
+    AuditEntryResponse,
+    AuditLogSummary,
+)
 from app.workers.celery_tasks import celery_app
 from shared.events import (
     AppointmentCancelledEvent,
@@ -39,28 +62,6 @@ get_current_user, require_roles = make_auth_dependency(
     settings.JWT_SECRET_KEY, settings.JWT_ALGORITHM
 )
 
-# ─── Schemas ─────────────────────────────────────────────────────────────────
-
-class ReportRequest(BaseModel):
-    report_type: Literal["CONSULTATIONS", "PATIENTS", "DOCTORS", "PRESCRIPTIONS"]
-    output_format: Literal["JSON", "CSV", "PDF"] = "JSON"
-    parameters: dict = {}
-
-
-class ReportJobResponse(BaseModel):
-    id: str
-    report_type: str
-    status: str
-    output_format: str
-    row_count: int
-    s3_key: Optional[str] = None
-    result_data: Optional[dict] = None
-    error_message: Optional[str] = None
-    created_at: datetime
-    completed_at: Optional[datetime] = None
-    model_config = {"from_attributes": True}
-
-
 # ─── Reports Router ──────────────────────────────────────────────────────────
 
 router = APIRouter(prefix="/reports", tags=["Reports"])
@@ -70,12 +71,14 @@ def _sf(r: Request):
     return r.app.state.session_factory
 
 
+# ─── Export (existing, extended with XLSX and CUSTOM) ────────────────────────
+
 @router.post(
     "/export",
     status_code=status.HTTP_202_ACCEPTED,
     dependencies=[Depends(require_roles("ADMIN", "DOCTOR"))],
 )
-async def request_report(body: ReportRequest, request: Request, user=Depends(get_current_user)):
+async def request_report(body: ReportExportRequest, request: Request, user=Depends(get_current_user)):
     async with _sf(request)() as session:
         job = ReportJob(
             id=str(uuid.uuid4()),
@@ -87,6 +90,20 @@ async def request_report(body: ReportRequest, request: Request, user=Depends(get
         session.add(job)
         await session.commit()
 
+        # Audit
+        session.add(ReportAuditLog(
+            id=str(uuid.uuid4()),
+            event_type="REPORT_REQUESTED",
+            entity_type="report_job",
+            entity_id=job.id,
+            description=f"Report requested: {body.report_type} ({body.output_format})",
+            performed_by=user.sub,
+            metadata={"report_type": body.report_type, "output_format": body.output_format,
+                      "parameters": body.parameters},
+            ip_address=request.client.host if request.client else None,
+        ))
+        await session.commit()
+
     reports_generated_total.labels(
         service=_settings.SERVICE_NAME,
         report_type=body.report_type,
@@ -95,6 +112,83 @@ async def request_report(body: ReportRequest, request: Request, user=Depends(get
 
     celery_app.send_task("reporting.generate_report", args=[job.id])
     return {"job_id": job.id, "status": "PENDING"}
+
+
+@router.post(
+    "/export/custom",
+    status_code=status.HTTP_202_ACCEPTED,
+    dependencies=[Depends(require_roles("ADMIN", "DOCTOR"))],
+)
+async def request_custom_report(body: CustomReportRequest, request: Request, user=Depends(get_current_user)):
+    """Request a custom report using a pre-approved SQL template."""
+    if body.sql_query_name not in settings.CUSTOM_SQL_TEMPLATES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unknown query template '{body.sql_query_name}'. "
+                   f"Available: {list(settings.CUSTOM_SQL_TEMPLATES.keys())}",
+        )
+
+    async with _sf(request)() as session:
+        job = ReportJob(
+            id=str(uuid.uuid4()),
+            report_type="CUSTOM",
+            output_format=body.output_format,
+            parameters={"sql_query_name": body.sql_query_name, **body.parameters},
+            requested_by=user.sub,
+        )
+        session.add(job)
+        await session.commit()
+
+        session.add(ReportAuditLog(
+            id=str(uuid.uuid4()),
+            event_type="CUSTOM_REPORT_REQUESTED",
+            entity_type="report_job",
+            entity_id=job.id,
+            description=f"Custom report: {body.sql_query_name} ({body.output_format})",
+            performed_by=user.sub,
+            metadata={"sql_query_name": body.sql_query_name, "output_format": body.output_format,
+                      "parameters": body.parameters},
+            ip_address=request.client.host if request.client else None,
+        ))
+        await session.commit()
+
+    celery_app.send_task("reporting.generate_report", args=[job.id])
+    return {"job_id": job.id, "status": "PENDING", "query_template": body.sql_query_name}
+
+
+@router.post(
+    "/export/multi-sheet",
+    status_code=status.HTTP_202_ACCEPTED,
+    dependencies=[Depends(require_roles("ADMIN", "DOCTOR"))],
+)
+async def request_multi_sheet_export(body: MultiSheetExportRequest, request: Request, user=Depends(get_current_user)):
+    """Request an XLSX export with multiple sheets."""
+    async with _sf(request)() as session:
+        job = ReportJob(
+            id=str(uuid.uuid4()),
+            report_type="CUSTOM",
+            output_format="XLSX",
+            parameters={"filename": body.filename, "sheets": [s.model_dump() for s in body.sheets]},
+            requested_by=user.sub,
+        )
+        session.add(job)
+        await session.commit()
+
+        session.add(ReportAuditLog(
+            id=str(uuid.uuid4()),
+            event_type="MULTI_SHEET_REQUESTED",
+            entity_type="report_job",
+            entity_id=job.id,
+            description=f"Multi-sheet XLSX: {len(body.sheets)} sheets",
+            performed_by=user.sub,
+            metadata={"filename": body.filename, "sheet_count": len(body.sheets)},
+            ip_address=request.client.host if request.client else None,
+        ))
+        await session.commit()
+
+    sheets_def = [s.model_dump() for s in body.sheets]
+    celery_app.send_task("reporting.generate_multi_sheet", args=[job.id, sheets_def])
+    return {"job_id": job.id, "status": "PENDING", "sheets": len(body.sheets)}
 
 
 @router.get(
@@ -140,6 +234,451 @@ async def download_report(job_id: str, request: Request):
     )
     return RedirectResponse(url=url, status_code=302)
 
+
+# ─── Schedule Management ─────────────────────────────────────────────────────
+
+schedule_router = APIRouter(prefix="/schedules", tags=["Schedules"])
+
+
+@schedule_router.post(
+    "",
+    response_model=ScheduleResponse,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require_roles("ADMIN"))],
+)
+async def create_schedule(body: ScheduleCreate, request: Request, user=Depends(get_current_user)):
+    async with _sf(request)() as session:
+        sched = ReportSchedule(
+            id=str(uuid.uuid4()),
+            name=body.name,
+            report_type=body.report_type,
+            output_format=body.output_format,
+            cron_expression=body.cron_expression,
+            parameters=body.parameters,
+            recipients=body.recipients,
+            active=body.active,
+            created_by=user.sub,
+        )
+        session.add(sched)
+        await session.commit()
+        await session.refresh(sched)
+
+        session.add(ReportAuditLog(
+            id=str(uuid.uuid4()),
+            event_type="SCHEDULE_CREATED",
+            entity_type="report_schedule",
+            entity_id=sched.id,
+            description=f"Schedule created: {body.name} ({body.cron_expression})",
+            performed_by=user.sub,
+            metadata={"name": body.name, "report_type": body.report_type,
+                      "cron_expression": body.cron_expression},
+            ip_address=request.client.host if request.client else None,
+        ))
+        await session.commit()
+
+    # Refresh Celery Beat schedules
+    celery_app.send_task("reporting.refresh_beat_schedules")
+    return ScheduleResponse.model_validate(sched)
+
+
+@schedule_router.get(
+    "",
+    response_model=ScheduleListResponse,
+    dependencies=[Depends(require_roles("ADMIN"))],
+)
+async def list_schedules(request: Request, page: int = Query(1, ge=1), size: int = Query(20, ge=1, le=100)):
+    async with _sf(request)() as session:
+        offset = (page - 1) * size
+        result = await session.execute(
+            select(ReportSchedule).order_by(ReportSchedule.created_at.desc()).offset(offset).limit(size)
+        )
+        items = result.scalars().all()
+        total_result = await session.execute(select(func.count(ReportSchedule.id)))
+        total = total_result.scalar() or 0
+        return ScheduleListResponse(
+            items=[ScheduleResponse.model_validate(s) for s in items],
+            total=total,
+        )
+
+
+@schedule_router.get(
+    "/{schedule_id}",
+    response_model=ScheduleResponse,
+    dependencies=[Depends(require_roles("ADMIN"))],
+)
+async def get_schedule(schedule_id: str, request: Request):
+    async with _sf(request)() as session:
+        result = await session.execute(select(ReportSchedule).where(ReportSchedule.id == schedule_id))
+        sched = result.scalar_one_or_none()
+        if not sched:
+            raise HTTPException(status_code=404, detail="Schedule not found")
+        return ScheduleResponse.model_validate(sched)
+
+
+@schedule_router.put(
+    "/{schedule_id}",
+    response_model=ScheduleResponse,
+    dependencies=[Depends(require_roles("ADMIN"))],
+)
+async def update_schedule(schedule_id: str, body: ScheduleUpdate, request: Request, user=Depends(get_current_user)):
+    async with _sf(request)() as session:
+        result = await session.execute(select(ReportSchedule).where(ReportSchedule.id == schedule_id))
+        sched = result.scalar_one_or_none()
+        if not sched:
+            raise HTTPException(status_code=404, detail="Schedule not found")
+
+        update_data = body.model_dump(exclude_unset=True)
+        for field, value in update_data.items():
+            setattr(sched, field, value)
+
+        await session.commit()
+        await session.refresh(sched)
+
+        session.add(ReportAuditLog(
+            id=str(uuid.uuid4()),
+            event_type="SCHEDULE_UPDATED",
+            entity_type="report_schedule",
+            entity_id=sched.id,
+            description=f"Schedule updated: {sched.name}",
+            performed_by=user.sub,
+            metadata={"updated_fields": list(update_data.keys())},
+            ip_address=request.client.host if request.client else None,
+        ))
+        await session.commit()
+
+    celery_app.send_task("reporting.refresh_beat_schedules")
+    return ScheduleResponse.model_validate(sched)
+
+
+@schedule_router.delete(
+    "/{schedule_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(require_roles("ADMIN"))],
+)
+async def delete_schedule(schedule_id: str, request: Request, user=Depends(get_current_user)):
+    async with _sf(request)() as session:
+        result = await session.execute(select(ReportSchedule).where(ReportSchedule.id == schedule_id))
+        sched = result.scalar_one_or_none()
+        if not sched:
+            raise HTTPException(status_code=404, detail="Schedule not found")
+
+        await session.delete(sched)
+        await session.commit()
+
+        session.add(ReportAuditLog(
+            id=str(uuid.uuid4()),
+            event_type="SCHEDULE_DELETED",
+            entity_type="report_schedule",
+            entity_id=schedule_id,
+            description=f"Schedule deleted: {sched.name}",
+            performed_by=user.sub,
+            ip_address=request.client.host if request.client else None,
+        ))
+        await session.commit()
+
+    celery_app.send_task("reporting.refresh_beat_schedules")
+
+
+@schedule_router.post(
+    "/{schedule_id}/trigger",
+    status_code=status.HTTP_202_ACCEPTED,
+    dependencies=[Depends(require_roles("ADMIN"))],
+)
+async def trigger_schedule_now(schedule_id: str, request: Request, user=Depends(get_current_user)):
+    """Manually trigger a scheduled report immediately."""
+    async with _sf(request)() as session:
+        result = await session.execute(select(ReportSchedule).where(ReportSchedule.id == schedule_id))
+        sched = result.scalar_one_or_none()
+        if not sched:
+            raise HTTPException(status_code=404, detail="Schedule not found")
+
+        job = ReportJob(
+            id=str(uuid.uuid4()),
+            report_type=sched.report_type,
+            output_format=sched.output_format,
+            parameters=sched.parameters,
+            requested_by=user.sub,
+            schedule_id=schedule_id,
+        )
+        session.add(job)
+        await session.commit()
+
+        session.add(ReportAuditLog(
+            id=str(uuid.uuid4()),
+            event_type="SCHEDULE_MANUAL_TRIGGER",
+            entity_type="report_schedule",
+            entity_id=schedule_id,
+            description=f"Manual trigger of schedule: {sched.name}",
+            performed_by=user.sub,
+            metadata={"job_id": job.id},
+            ip_address=request.client.host if request.client else None,
+        ))
+        await session.commit()
+
+    celery_app.send_task("reporting.generate_report", args=[job.id])
+    return {"job_id": job.id, "status": "PENDING", "schedule_id": schedule_id}
+
+
+# ─── Webhook Management ──────────────────────────────────────────────────────
+
+webhook_router = APIRouter(prefix="/webhooks", tags=["Webhooks"])
+
+
+@webhook_router.post(
+    "",
+    response_model=WebhookConfigResponse,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require_roles("ADMIN"))],
+)
+async def create_webhook(body: WebhookConfigCreate, request: Request, user=Depends(get_current_user)):
+    async with _sf(request)() as session:
+        wh = WebhookConfig(
+            id=str(uuid.uuid4()),
+            url=str(body.url),
+            secret=body.secret,
+            description=body.description,
+            active=body.active,
+            max_retries=body.max_retries,
+            retry_interval_seconds=body.retry_interval_seconds,
+            events=body.events,
+            created_by=user.sub,
+        )
+        session.add(wh)
+        await session.commit()
+        await session.refresh(wh)
+
+        session.add(ReportAuditLog(
+            id=str(uuid.uuid4()),
+            event_type="WEBHOOK_CREATED",
+            entity_type="webhook_config",
+            entity_id=wh.id,
+            description=f"Webhook created: {wh.url}",
+            performed_by=user.sub,
+            metadata={"url": str(body.url), "events": body.events},
+            ip_address=request.client.host if request.client else None,
+        ))
+        await session.commit()
+
+    return WebhookConfigResponse.model_validate(wh)
+
+
+@webhook_router.get(
+    "",
+    dependencies=[Depends(require_roles("ADMIN"))],
+)
+async def list_webhooks(request: Request):
+    async with _sf(request)() as session:
+        result = await session.execute(select(WebhookConfig).order_by(WebhookConfig.created_at.desc()))
+        items = result.scalars().all()
+        return {"items": [WebhookConfigResponse.model_validate(w) for w in items], "total": len(items)}
+
+
+@webhook_router.get(
+    "/{webhook_id}",
+    response_model=WebhookConfigResponse,
+    dependencies=[Depends(require_roles("ADMIN"))],
+)
+async def get_webhook(webhook_id: str, request: Request):
+    async with _sf(request)() as session:
+        result = await session.execute(select(WebhookConfig).where(WebhookConfig.id == webhook_id))
+        wh = result.scalar_one_or_none()
+        if not wh:
+            raise HTTPException(status_code=404, detail="Webhook not found")
+        return WebhookConfigResponse.model_validate(wh)
+
+
+@webhook_router.put(
+    "/{webhook_id}",
+    response_model=WebhookConfigResponse,
+    dependencies=[Depends(require_roles("ADMIN"))],
+)
+async def update_webhook(webhook_id: str, body: WebhookConfigUpdate, request: Request, user=Depends(get_current_user)):
+    async with _sf(request)() as session:
+        result = await session.execute(select(WebhookConfig).where(WebhookConfig.id == webhook_id))
+        wh = result.scalar_one_or_none()
+        if not wh:
+            raise HTTPException(status_code=404, detail="Webhook not found")
+
+        update_data = body.model_dump(exclude_unset=True)
+        if "url" in update_data:
+            update_data["url"] = str(update_data["url"])
+        for field, value in update_data.items():
+            setattr(wh, field, value)
+
+        await session.commit()
+        await session.refresh(wh)
+
+        session.add(ReportAuditLog(
+            id=str(uuid.uuid4()),
+            event_type="WEBHOOK_UPDATED",
+            entity_type="webhook_config",
+            entity_id=wh.id,
+            description=f"Webhook updated: {wh.url}",
+            performed_by=user.sub,
+            metadata={"updated_fields": list(update_data.keys())},
+            ip_address=request.client.host if request.client else None,
+        ))
+        await session.commit()
+
+    return WebhookConfigResponse.model_validate(wh)
+
+
+@webhook_router.delete(
+    "/{webhook_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(require_roles("ADMIN"))],
+)
+async def delete_webhook(webhook_id: str, request: Request, user=Depends(get_current_user)):
+    async with _sf(request)() as session:
+        result = await session.execute(select(WebhookConfig).where(WebhookConfig.id == webhook_id))
+        wh = result.scalar_one_or_none()
+        if not wh:
+            raise HTTPException(status_code=404, detail="Webhook not found")
+
+        await session.delete(wh)
+        await session.commit()
+
+        session.add(ReportAuditLog(
+            id=str(uuid.uuid4()),
+            event_type="WEBHOOK_DELETED",
+            entity_type="webhook_config",
+            entity_id=webhook_id,
+            description=f"Webhook deleted: {wh.url}",
+            performed_by=user.sub,
+            ip_address=request.client.host if request.client else None,
+        ))
+        await session.commit()
+
+
+@webhook_router.get(
+    "/{webhook_id}/deliveries",
+    dependencies=[Depends(require_roles("ADMIN"))],
+)
+async def list_webhook_deliveries(
+    webhook_id: str,
+    request: Request,
+    page: int = Query(1, ge=1),
+    size: int = Query(20, ge=1, le=100),
+):
+    async with _sf(request)() as session:
+        offset = (page - 1) * size
+        result = await session.execute(
+            select(WebhookDeliveryLog)
+            .where(WebhookDeliveryLog.webhook_config_id == webhook_id)
+            .order_by(WebhookDeliveryLog.delivered_at.desc())
+            .offset(offset)
+            .limit(size)
+        )
+        items = result.scalars().all()
+        total_result = await session.execute(
+            select(func.count(WebhookDeliveryLog.id))
+            .where(WebhookDeliveryLog.webhook_config_id == webhook_id)
+        )
+        total = total_result.scalar() or 0
+        return {
+            "items": [WebhookDeliveryLogResponse.model_validate(d) for d in items],
+            "total": total,
+            "page": page,
+            "size": size,
+        }
+
+
+# ─── Audit Logs (Reporting-specific) ─────────────────────────────────────────
+
+audit_router = APIRouter(prefix="/audit", tags=["Auditoria"])
+
+
+@audit_router.get(
+    "/logs",
+    summary="Consultar logs de auditoria do reporting service",
+    dependencies=[Depends(require_roles("ADMIN"))],
+)
+async def get_report_audit_logs(
+    request: Request,
+    event_type: Optional[str] = Query(None),
+    entity_type: Optional[str] = Query(None),
+    from_date: Optional[str] = Query(None),
+    to_date: Optional[str] = Query(None),
+    page: int = Query(1, ge=1),
+    size: int = Query(50, ge=1, le=200),
+):
+    async with _sf(request)() as session:
+        q = select(ReportAuditLog)
+        if event_type:
+            q = q.where(ReportAuditLog.event_type == event_type)
+        if entity_type:
+            q = q.where(ReportAuditLog.entity_type == entity_type)
+        if from_date:
+            q = q.where(ReportAuditLog.created_at >= from_date)
+        if to_date:
+            q = q.where(ReportAuditLog.created_at <= to_date)
+
+        total_result = await session.execute(select(func.count()).select_from(q.subquery()))
+        total = total_result.scalar() or 0
+
+        offset = (page - 1) * size
+        result = await session.execute(
+            q.order_by(ReportAuditLog.created_at.desc()).offset(offset).limit(size)
+        )
+        items = result.scalars().all()
+
+        return {
+            "items": [AuditEntryResponse.model_validate(a) for a in items],
+            "total": total,
+            "page": page,
+            "size": size,
+        }
+
+
+@audit_router.get(
+    "/summary",
+    summary="Resumo de auditoria do reporting service",
+    dependencies=[Depends(require_roles("ADMIN"))],
+)
+async def get_report_audit_summary(
+    request: Request,
+    from_date: Optional[str] = Query(None),
+    to_date: Optional[str] = Query(None),
+):
+    if not from_date:
+        from_date = (datetime.now(timezone.utc) - timedelta(days=30)).strftime("%Y-%m-%d")
+    if not to_date:
+        to_date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+
+    async with _sf(request)() as session:
+        rows = await session.execute(
+            select(ReportAuditLog.event_type, func.count().label("cnt"))
+            .where(ReportAuditLog.created_at >= from_date)
+            .where(ReportAuditLog.created_at <= to_date)
+            .group_by(ReportAuditLog.event_type)
+        )
+        by_event = {r.event_type: r.cnt for r in rows.fetchall()}
+
+        user_rows = await session.execute(
+            select(ReportAuditLog.performed_by, func.count().label("cnt"))
+            .where(ReportAuditLog.created_at >= from_date)
+            .where(ReportAuditLog.created_at <= to_date)
+            .group_by(ReportAuditLog.performed_by)
+        )
+        by_user = {r.performed_by: r.cnt for r in user_rows.fetchall()}
+
+        total_result = await session.execute(
+            select(func.count(ReportAuditLog.id))
+            .where(ReportAuditLog.created_at >= from_date)
+            .where(ReportAuditLog.created_at <= to_date)
+        )
+        total = total_result.scalar() or 0
+
+    return AuditLogSummary(
+        total=total,
+        by_event_type=by_event,
+        by_user=by_user,
+        period_start=from_date,
+        period_end=to_date,
+    )
+
+
+# ─── Existing Dashboard / Stats endpoints ────────────────────────────────────
 
 @router.get(
     "/consultations",
@@ -224,9 +763,9 @@ async def dashboard_summary(request: Request):
         return {"consultations_today": consultations_today, "new_patients_this_month": new_patients_month, "cancellations_today": cancellations_today, "as_of": datetime.now(timezone.utc).isoformat()}
 
 
-# ─── Audit Router ────────────────────────────────────────────────────────────
+# ─── Cross-service Audit Router (existing) ───────────────────────────────────
 
-audit_router = APIRouter(prefix="/audit", tags=["Auditoria"])
+audit_cross_router = APIRouter(prefix="/audit", tags=["Auditoria"])
 
 
 def _get_db_urls() -> dict[str, str]:
@@ -237,9 +776,9 @@ def _get_db_urls() -> dict[str, str]:
     }
 
 
-@audit_router.get(
-    "/logs",
-    summary="Consultar logs de auditoria",
+@audit_cross_router.get(
+    "/cross/logs",
+    summary="Consultar logs de auditoria (cross-service)",
     dependencies=[Depends(require_roles("ADMIN"))],
 )
 async def get_audit_logs(
@@ -299,9 +838,9 @@ async def get_audit_logs(
     return {"items": all_logs[:size], "total": len(all_logs), "page": page, "size": size}
 
 
-@audit_router.get(
-    "/summary",
-    summary="Resumo de auditoria",
+@audit_cross_router.get(
+    "/cross/summary",
+    summary="Resumo de auditoria (cross-service)",
     dependencies=[Depends(require_roles("ADMIN"))],
 )
 async def get_audit_summary(
@@ -349,9 +888,9 @@ async def get_audit_summary(
     return summary
 
 
-@audit_router.get(
-    "/suspicious",
-    summary="Atividades suspeitas",
+@audit_cross_router.get(
+    "/cross/suspicious",
+    summary="Atividades suspeitas (cross-service)",
     dependencies=[Depends(require_roles("ADMIN"))],
 )
 async def get_suspicious():
@@ -362,7 +901,6 @@ async def get_suspicious():
         try:
             conn = await asyncpg.connect(url)
             try:
-                # Muitos DELETEs por usuário em 1h
                 rows = await conn.fetch(
                     "SELECT user_id, user_email, COUNT(*) AS cnt, "
                     "date_trunc('hour', timestamp) AS hour "
@@ -383,7 +921,6 @@ async def get_suspicious():
                         "period_hour": str(row["hour"]),
                     })
 
-                # Logins com falha repetidos
                 failed = await conn.fetch(
                     "SELECT user_email, COUNT(*) AS cnt "
                     "FROM audit_logs "
@@ -540,8 +1077,8 @@ async def list_backups():
 
 app = FastAPI(
     title="PROMPTUARIO — Reporting Service",
-    description="Relatórios, exportações assíncronas e auditoria",
-    version="1.0.0",
+    description="Relatórios, exportações assíncronas, agendamento, webhooks e auditoria",
+    version="2.0.0",
 )
 
 app.add_middleware(
@@ -555,8 +1092,11 @@ app.add_middleware(
 setup_observability(app, settings.SERVICE_NAME, settings.LOG_LEVEL)
 
 app.include_router(router, prefix="/api/v1")
-app.include_router(backup_router, prefix="/api/v1")
+app.include_router(schedule_router, prefix="/api/v1")
+app.include_router(webhook_router, prefix="/api/v1")
 app.include_router(audit_router, prefix="/api/v1")
+app.include_router(audit_cross_router, prefix="/api/v1")
+app.include_router(backup_router, prefix="/api/v1")
 
 
 @app.on_event("startup")
@@ -578,7 +1118,7 @@ async def startup():
     await consumer.start()
     app.state.consumer = consumer
 
-    logger.info("Reporting Service started ✅")
+    logger.info("Reporting Service v2 started ✅ (scheduling, webhooks, XLSX, audit)")
 
 
 @app.on_event("shutdown")
