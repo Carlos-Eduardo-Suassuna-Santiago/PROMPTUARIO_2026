@@ -98,6 +98,21 @@ python scripts/fastapi_services_smoke.py
 
 Documentação técnica, diagramas e planejamentos estão em `DOCUMENTATION/` e `DOCUMENTATION/DIAGRAMS/`.
 
+### Principais documentos
+
+- [Arquitetura de Software](DOCUMENTATION/ARQUITETURA_DE_SOFTWARE.md) — Visão geral da arquitetura, padrões e decisões técnicas
+- [Arquitetura Global](DOCUMENTATION/ETAPA_1_ARQUITETURA_GLOBAL.md) — Diagramas de componentes, fluxos e comunicação entre serviços
+- [Eventos e Mensageria (RabbitMQ)](DOCUMENTATION/ETAPA_2_Eventos_Rabbitmq%20_Arquitetura_Event_Driven.md) — Arquitetura orientada a eventos e definição das exchanges
+- [Infraestrutura Distribuída (Docker)](DOCUMENTATION/ETAPA_10_Infraestrutura_Distribuida_Docker_Rabbitmq_Postgresql.md) — Orquestração com Docker Compose, volumes e redes
+- [Observabilidade](DOCUMENTATION/ETAPA_11_Observabilidade_Distribuida_Prometheus_Grafana_Loki.md) — Prometheus, Grafana, Loki e Jaeger
+- [CI/CD](DOCUMENTATION/ETAPA_12_Cicd_Distribuido_Github_Actions_Docker.md) — Pipeline de integração contínua com GitHub Actions
+- [Modelo Lógico do Banco de Dados](DOCUMENTATION/ETAPA_14_Modelo_Logico_Do_Banco_De_Dados.md) — Diagramas ER e modelos relacionais
+- [Requisitos e Histórias de Usuário](DOCUMENTATION/REQUISITOS_HISTORIAS_DE_USUARIOS.md) — Funcionalidades detalhadas por papel de usuário
+- [Planejamento de Endpoints](DOCUMENTATION/PLANEJAMENTO_DE_ENDPOINTS_PI.md) — Mapeamento completo de rotas da API
+- [Status Geral do Sistema](DOCUMENTATION/STATUS_GERAL_DO_SISTEMA.md) — Acompanhamento do progresso de implementação
+- [Processo de Software](DOCUMENTATION/ETAPA_13_Definicao_Do_Processo_De_Software.md) — Metodologia, sprints e práticas de desenvolvimento
+- [Backup e Restore](DOCUMENTATION/OPERACIONAL_BACKUP_RESTORE.md) — Procedimentos operacionais de backup e recuperação
+
 ## Estrutura do Projeto
 
 ```
