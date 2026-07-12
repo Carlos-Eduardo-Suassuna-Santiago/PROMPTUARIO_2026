@@ -399,6 +399,11 @@ async def proxy(request: Request, path: str):
     forward_headers = dict(request.headers)
     forward_headers.pop("host", None)
 
+    request_id = request.headers.get("X-Request-Id") or request.headers.get("x-request-id") or str(hashlib.sha256(f"{full_path}:{time.time()}".encode()).hexdigest()[:12])
+    correlation_id = request.headers.get("X-Correlation-Id") or request.headers.get("x-correlation-id") or request_id
+    forward_headers["X-Request-Id"] = request_id
+    forward_headers["X-Correlation-Id"] = correlation_id
+
     if user_id:
         forward_headers["X-User-Id"] = user_id
         forward_headers["X-User-Role"] = user_role or ""
@@ -435,13 +440,17 @@ async def proxy(request: Request, path: str):
     if request.method == "GET" and _is_cacheable_path(full_path):
         await _set_cached_response(request, full_path, request.url.query, scope, response)
 
+    # Sanitize PII in logs — never log raw tokens, passwords, or full user emails
+    safe_user = user_id[:8] + "..." if user_id and len(user_id) > 8 else (user_id or "anon")
     logger.info(
-        "%s %s → %s [%d] user=%s",
+        "%s %s → %s [%d] user=%s request_id=%s correlation_id=%s",
         request.method,
         full_path,
         target_base,
         response.status_code,
-        user_id or "anon",
+        safe_user,
+        request_id,
+        correlation_id,
     )
 
     return response

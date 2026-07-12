@@ -131,6 +131,15 @@ groups:
           summary: "Pico de falhas de login > 10/min"
           description: "Taxa de {{ $value }} falhas de login/minuto — possível ataque de força bruta."
 
+      - alert: LoginFailuresCritical
+        expr: rate(login_attempts_total{status="failure"}[5m]) > 50
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Pico crítico de falhas de login > 50/min"
+          description: "Taxa de {{ $value }} falhas de login/minuto — ataque de força bruta em andamento!"
+
       - alert: AiErrorsSpike
         expr: rate(ai_errors_total[5m]) > 5
         for: 5m
@@ -139,3 +148,57 @@ groups:
         annotations:
           summary: "Pico de erros na IA > 5/min"
           description: "O AI Service está com {{ $value }} erros/minuto."
+
+      - alert: AiErrorsCritical
+        expr: rate(ai_errors_total[5m]) > 20
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Pico crítico de erros na IA > 20/min"
+          description: "O AI Service está com {{ $value }} erros/minuto — possível falha no LLM."
+
+      - alert: AuditEventsFailing
+        expr: rate(audit_events_failed_total[5m]) > 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Falhas ao registrar auditoria em {{ $labels.service }}"
+          description: "O serviço {{ $labels.service }} está com falhas ao registrar eventos de auditoria."
+
+      - alert: ReportsFailing
+        expr: rate(reports_errors_total[5m]) > 3
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Erros na geração de relatórios > 3/min"
+          description: "O Reporting Service está com {{ $value }} erros/min na geração de relatórios."
+
+      - alert: CircuitBreakerOpen
+        expr: gateway_circuit_state > 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Circuit breaker aberto para {{ $labels.target }}"
+          description: "O gateway abriu o circuit breaker para o serviço {{ $labels.target }}."
+
+      - alert: HighRejectedRequests
+        expr: rate(http_requests_rejected_total[5m]) > 50
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Muitas requisições rejeitadas > 50/min"
+          description: "O serviço {{ $labels.service }} rejeitou {{ $value }} requisições/min (rate limit / auth)."
+
+      - alert: PrescriptionGenerationFailing
+        expr: rate(reports_errors_total{report_type="PRESCRIPTIONS"}[5m]) > 2
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Falhas na geração de prescrições"
+          description: "Geração de prescrições com {{ $value }} erros/min."
