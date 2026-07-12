@@ -20,21 +20,20 @@ from pythonjsonlogger import jsonlogger
 
 logger = logging.getLogger(__name__)
 
-_context_storage = threading.local()
+from contextvars import ContextVar
 
+_context_storage: ContextVar[dict[str, str]] = ContextVar("request_context", default={})
 
 def set_request_context(**values: str | None) -> None:
-    current = getattr(_context_storage, "values", {})
-    current.update({k: v for k, v in values.items() if v is not None})
-    _context_storage.values = current
-
+    current = dict(_context_storage.get())
+    current.update({k: str(v) for k, v in values.items() if v is not None})
+    _context_storage.set(current)
 
 def get_request_context() -> dict[str, str]:
-    return getattr(_context_storage, "values", {}).copy()
-
+    return dict(_context_storage.get())
 
 def clear_request_context() -> None:
-    _context_storage.values = {}
+    _context_storage.set({})
 
 
 def register_resilience_metrics(app: FastAPI, service_name: str) -> dict[str, Any]:

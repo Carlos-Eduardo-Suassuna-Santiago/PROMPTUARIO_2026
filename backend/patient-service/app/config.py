@@ -16,6 +16,7 @@ class Settings(BaseSettings):
 
     # MinIO / S3-compatible storage for patient documents
     S3_ENDPOINT: str = "http://localhost:9000"
+    S3_PUBLIC_ENDPOINT: str = "http://localhost:9000"
     S3_ACCESS_KEY: str = "minioadmin"
     S3_SECRET_KEY: str = "minioadmin"
     S3_BUCKET_PATIENT_DOCUMENTS: str = "patient-documents"

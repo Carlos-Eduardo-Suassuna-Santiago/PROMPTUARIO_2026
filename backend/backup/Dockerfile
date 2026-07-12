@@ -4,7 +4,7 @@ FROM python:3.12-alpine
 RUN apk add --no-cache postgresql-client mongodb-tools curl
 
 # Dependências Python
-RUN pip install --no-cache-dir boto3==1.35.0 schedule==1.2.2
+RUN pip install --default-timeout=120 --no-cache-dir boto3==1.35.0 schedule==1.2.2
 
 WORKDIR /app
 COPY backup/backup_runner.py .

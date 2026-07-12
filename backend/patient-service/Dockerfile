@@ -6,7 +6,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc libpq-dev curl && rm -rf /var/lib/apt/lists/*
 
 COPY patient-service/requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --default-timeout=120 --no-cache-dir -r requirements.txt
 
 COPY shared /app/shared
 COPY patient-service/app ./app

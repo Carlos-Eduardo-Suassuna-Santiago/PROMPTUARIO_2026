@@ -3,7 +3,7 @@ import {
   usersApi, patientsApi, appointmentsApi, recordsApi, aiApi, reportsApi
 } from '@/api/services'
 import type {
-  UserCreate, PatientCreate, AllergyCreate, AppointmentCreate,
+  UserCreate, UserUpdate, PatientCreate, AllergyCreate, VaccineCreate, AppointmentCreate,
   MedicalRecordCreate, AnalysisType, ReportType, OutputFormat
 } from '@/types'
 
@@ -84,6 +84,15 @@ export function useDeactivateUser() {
   })
 }
 
+export function useUpdateUser() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, data }: { id: string; data: Partial<UserUpdate> }) =>
+      usersApi.update(id, data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: keys.users.all }),
+  })
+}
+
 // ─── Patients ───────────────────────────────────────────────────────────────
 export function usePatients(params?: { page?: number; size?: number; search?: string }) {
   return useQuery({
@@ -97,6 +106,13 @@ export function usePatient(id: string) {
     queryKey: keys.patients.detail(id),
     queryFn: () => patientsApi.get(id),
     enabled: !!id,
+  })
+}
+
+export function useMyPatient() {
+  return useQuery({
+    queryKey: ['patients', 'me'],
+    queryFn: () => patientsApi.me(),
   })
 }
 
@@ -148,7 +164,18 @@ export function useUpdatePatient() {
     onSuccess: (_, { id }) => {
       qc.invalidateQueries({ queryKey: keys.patients.detail(id) })
       qc.invalidateQueries({ queryKey: keys.patients.summary(id) })
+      qc.invalidateQueries({ queryKey: ['patients', 'me'] })
     },
+  })
+}
+
+export function useAddVaccine() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ patientId, data }: { patientId: string; data: VaccineCreate }) =>
+      patientsApi.addVaccine(patientId, data),
+    onSuccess: (_, { patientId }) =>
+      qc.invalidateQueries({ queryKey: keys.patients.vaccines(patientId) }),
   })
 }
 
@@ -169,6 +196,26 @@ export function useDeleteAllergy() {
       patientsApi.deleteAllergy(patientId, allergyId),
     onSuccess: (_, { patientId }) =>
       qc.invalidateQueries({ queryKey: keys.patients.allergies(patientId) }),
+  })
+}
+
+export function useAddMedication() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ patientId, data }: { patientId: string; data: { name: string; dosage: string; frequency: string; prescribing_doctor?: string; started_at?: string; notes?: string } }) =>
+      patientsApi.addMedication(patientId, data),
+    onSuccess: (_, { patientId }) =>
+      qc.invalidateQueries({ queryKey: keys.patients.medications(patientId) }),
+  })
+}
+
+export function useDeleteMedication() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ patientId, medId }: { patientId: string; medId: string }) =>
+      patientsApi.deleteMedication(patientId, medId),
+    onSuccess: (_, { patientId }) =>
+      qc.invalidateQueries({ queryKey: keys.patients.medications(patientId) }),
   })
 }
 
@@ -201,6 +248,14 @@ export function useCancelAppointment() {
   return useMutation({
     mutationFn: ({ id, reason }: { id: string; reason: string }) =>
       appointmentsApi.cancel(id, reason),
+    onSuccess: () => qc.invalidateQueries({ queryKey: keys.appointments.all }),
+  })
+}
+
+export function useConfirmAppointment() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (id: string) => appointmentsApi.confirm(id),
     onSuccess: () => qc.invalidateQueries({ queryKey: keys.appointments.all }),
   })
 }

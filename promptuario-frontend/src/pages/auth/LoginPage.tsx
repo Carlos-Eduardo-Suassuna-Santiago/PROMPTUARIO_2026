@@ -159,6 +159,22 @@ export function LoginPage() {
               {...register('password')}
             />
 
+            <div className="flex items-center justify-between mt-1">
+              <label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  className="w-4 h-4 rounded border-slate-700 bg-slate-900 text-brand-500 focus:ring-brand-500/50"
+                />
+                <span className="text-sm text-slate-400">Lembrar-me</span>
+              </label>
+              <Link
+                to="/forgot-password"
+                className="text-sm text-slate-500 hover:text-brand-400 transition-colors"
+              >
+                Esqueceu a senha?
+              </Link>
+            </div>
+
             <Button
               type="submit"
               className="w-full mt-2"
@@ -201,8 +217,21 @@ export function LoginPage() {
             </button>
           </div>
 
+          {/* Register link */}
+          <div className="mt-6 text-center">
+            <p className="text-sm text-slate-500">
+              Não tem conta?{' '}
+              <Link
+                to="/register-patient"
+                className="text-brand-400 hover:text-brand-300 transition-colors font-medium"
+              >
+                Cadastrar Paciente
+              </Link>
+            </p>
+          </div>
+
           {/* Role hints */}
-          <div className="mt-8 p-4 bg-slate-900/60 rounded-xl border border-slate-800/60">
+          <div className="mt-4 p-4 bg-slate-900/60 rounded-xl border border-slate-800/60">
             <p className="text-xs font-medium text-slate-500 mb-2">Credenciais padrão</p>
             <div className="space-y-1.5">
               {[

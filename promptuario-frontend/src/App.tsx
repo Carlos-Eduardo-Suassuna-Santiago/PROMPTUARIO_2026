@@ -10,12 +10,19 @@ import { PageLoader } from '@/components/ui'
 const LoginPage = lazy(() =>
   import('@/pages/auth/LoginPage').then((m) => ({ default: m.LoginPage }))
 )
-const OAuthCallback = lazy(() =>
-  import('@/pages/auth/OAuthCallback').then((m) => ({ default: m.OAuthCallback }))
-)
 const ForgotPasswordPage = lazy(() =>
   import('@/pages/auth/ForgotPasswordPage').then((m) => ({ default: m.ForgotPasswordPage }))
 )
+const ResetPasswordPage = lazy(() =>
+  import('@/pages/auth/ResetPasswordPage').then((m) => ({ default: m.ResetPasswordPage }))
+)
+const PatientRegisterPage = lazy(() =>
+  import('@/pages/auth/PatientRegisterPage').then((m) => ({ default: m.PatientRegisterPage }))
+)
+const OAuthCallback = lazy(() =>
+  import('@/pages/auth/OAuthCallback').then((m) => ({ default: m.OAuthCallback }))
+)
+
 const TwoFactorPage = lazy(() =>
   import('@/pages/auth/TwoFactorPage').then((m) => ({ default: m.TwoFactorPage }))
 )
@@ -37,11 +44,17 @@ const AppointmentsPage = lazy(() =>
 const ReportsPage = lazy(() =>
   import('@/pages/reports/ReportsPage').then((m) => ({ default: m.ReportsPage }))
 )
+const AIAnalysisPage = lazy(() =>
+  import('@/pages/ai/AIAnalysisPage').then((m) => ({ default: m.AIAnalysisPage }))
+)
 const UserManagementPage = lazy(() =>
   import('@/pages/admin/UserManagementPage').then((m) => ({ default: m.UserManagementPage }))
 )
 const AuditPage = lazy(() =>
   import('@/pages/admin/AuditPage').then((m) => ({ default: m.AuditPage }))
+)
+const ProfilePage = lazy(() =>
+  import('@/pages/profile/ProfilePage').then((m) => ({ default: m.ProfilePage }))
 )
 
 // React Query client
@@ -80,6 +93,8 @@ function AppRoutes() {
         {/* Public */}
         <Route path="/login" element={<LoginPage />} />
         <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+        <Route path="/reset-password" element={<ResetPasswordPage />} />
+        <Route path="/register-patient" element={<PatientRegisterPage />} />
         <Route path="/auth/2fa" element={<TwoFactorPage />} />
         <Route path="/auth/callback" element={<OAuthCallback />} />
 
@@ -90,6 +105,7 @@ function AppRoutes() {
             {/* All roles */}
             <Route path="/dashboard" element={<DashboardPage />} />
             <Route path="/appointments" element={<AppointmentsPage />} />
+            <Route path="/profile" element={<ProfilePage />} />
 
             {/* ADMIN, DOCTOR, ATTENDANT only */}
             <Route element={<RoleGuard allowedRoles={['ADMIN', 'DOCTOR', 'ATTENDANT']} />}>
@@ -106,6 +122,7 @@ function AppRoutes() {
 
             {/* ADMIN, DOCTOR only */}
             <Route element={<RoleGuard allowedRoles={['ADMIN', 'DOCTOR']} />}>
+              <Route path="/ai" element={<AIAnalysisPage />} />
               <Route path="/reports" element={<ReportsPage />} />
             </Route>
 

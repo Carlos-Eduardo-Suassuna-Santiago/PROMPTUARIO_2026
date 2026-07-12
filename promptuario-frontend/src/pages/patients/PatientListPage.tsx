@@ -3,8 +3,10 @@ import { useNavigate } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
+import { useQueryClient } from '@tanstack/react-query'
 import { UserRound, Search, Plus, Eye, ChevronRight } from 'lucide-react'
-import { usePatients, useUsers, useCreatePatient } from '@/hooks'
+import { usePatients, keys } from '@/hooks'
+import { usersApi, patientsApi } from '@/api/services'
 import { PageHeader } from '@/components/layout/AppShell'
 import {
   Card, CardHeader, CardBody, Button, Input, Select, Modal,
@@ -16,8 +18,15 @@ import type { Patient } from '@/types'
 
 // ─── Create Patient Modal ─────────────────────────────────────────────────
 const createSchema = z.object({
-  user_id: z.string().min(1, 'Selecione um usuário'),
+  // User fields
+  email: z.string().email('Email inválido'),
+  password: z
+    .string()
+    .min(8, 'Mínimo 8 caracteres')
+    .regex(/[A-Z]/, 'Deve conter ao menos uma letra maiúscula')
+    .regex(/[0-9]/, 'Deve conter ao menos um número'),
   full_name: z.string().min(2, 'Nome obrigatório'),
+  // Patient fields
   cpf: z.string().regex(/^\d{3}\.\d{3}\.\d{3}-\d{2}$/, 'CPF inválido (000.000.000-00)').optional().or(z.literal('')),
   date_of_birth: z.string().optional(),
   gender: z.enum(['M', 'F', 'OTHER']).optional(),
@@ -35,8 +44,8 @@ function CreatePatientModal({
   onClose: () => void
 }) {
   const [error, setError] = useState<string | null>(null)
-  const { data: users } = useUsers({ role: 'PATIENT', is_active: true, size: 100 })
-  const createPatient = useCreatePatient()
+  const [isLoading, setIsLoading] = useState(false)
+  const queryClient = useQueryClient()
 
   const { register, handleSubmit, reset, formState: { errors } } = useForm<CreateForm>({
     resolver: zodResolver(createSchema),
@@ -44,9 +53,19 @@ function CreatePatientModal({
 
   const onSubmit = async (data: CreateForm) => {
     setError(null)
+    setIsLoading(true)
     try {
-      await createPatient.mutateAsync({
-        user_id: data.user_id,
+      // Step 1: Create user with role PATIENT
+      const user = await usersApi.create({
+        email: data.email,
+        password: data.password,
+        full_name: data.full_name,
+        role: 'PATIENT',
+      })
+
+      // Step 2: Create patient linked to the user
+      await patientsApi.create({
+        user_id: user.id,
         full_name: data.full_name,
         cpf: data.cpf || undefined,
         date_of_birth: data.date_of_birth || undefined,
@@ -54,14 +73,18 @@ function CreatePatientModal({
         blood_type: data.blood_type || undefined,
         phone: data.phone || undefined,
       })
+
+      // Invalidate patients list cache to refresh the table
+      queryClient.invalidateQueries({ queryKey: keys.patients.all })
+
       reset()
       onClose()
     } catch (err) {
       setError(getErrorMessage(err))
+    } finally {
+      setIsLoading(false)
     }
   }
-
-  const userOptions = users?.items.map((u) => ({ value: u.id, label: `${u.full_name} — ${u.email}` })) ?? []
 
   return (
     <Modal
@@ -74,7 +97,7 @@ function CreatePatientModal({
           <Button variant="ghost" onClick={onClose}>Cancelar</Button>
           <Button
             onClick={handleSubmit(onSubmit)}
-            loading={createPatient.isPending}
+            loading={isLoading}
           >
             Cadastrar
           </Button>
@@ -82,57 +105,79 @@ function CreatePatientModal({
       }
     >
       {error && <Alert variant="error" className="mb-5">{error}</Alert>}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-        <div className="sm:col-span-2">
-          <Select
-            label="Usuário do sistema *"
-            options={userOptions}
-            placeholder="Selecione o usuário paciente"
-            error={errors.user_id?.message}
-            {...register('user_id')}
-          />
+      <div className="space-y-5">
+        {/* User credentials */}
+        <div>
+          <h4 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">
+            Credenciais de Acesso
+          </h4>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="sm:col-span-2">
+              <Input
+                label="Nome completo *"
+                placeholder="João da Silva"
+                error={errors.full_name?.message}
+                {...register('full_name')}
+              />
+            </div>
+            <Input
+              label="Email *"
+              type="email"
+              placeholder="paciente@email.com"
+              error={errors.email?.message}
+              {...register('email')}
+            />
+            <Input
+              label="Senha *"
+              type="password"
+              placeholder="Mín. 8 caracteres, 1 maiúscula, 1 número"
+              error={errors.password?.message}
+              {...register('password')}
+            />
+          </div>
         </div>
-        <div className="sm:col-span-2">
-          <Input
-            label="Nome completo *"
-            placeholder="João da Silva"
-            error={errors.full_name?.message}
-            {...register('full_name')}
-          />
-        </div>
-        <Input
-          label="CPF"
-          placeholder="000.000.000-00"
-          error={errors.cpf?.message}
-          {...register('cpf')}
-        />
-        <Input
-          label="Data de nascimento"
-          type="date"
-          error={errors.date_of_birth?.message}
-          {...register('date_of_birth')}
-        />
-        <Select
-          label="Gênero"
-          options={[
-            { value: 'M', label: 'Masculino' },
-            { value: 'F', label: 'Feminino' },
-            { value: 'OTHER', label: 'Outro' },
-          ]}
-          placeholder="Selecione"
-          {...register('gender')}
-        />
-        <Input
-          label="Tipo sanguíneo"
-          placeholder="O+"
-          {...register('blood_type')}
-        />
-        <div className="sm:col-span-2">
-          <Input
-            label="Telefone"
-            placeholder="+55 84 99999-0000"
-            {...register('phone')}
-          />
+
+        {/* Patient data */}
+        <div className="pt-4 border-t border-slate-800/60">
+          <h4 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">
+            Dados do Paciente
+          </h4>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <Input
+              label="CPF"
+              placeholder="000.000.000-00"
+              error={errors.cpf?.message}
+              {...register('cpf')}
+            />
+            <Input
+              label="Data de nascimento"
+              type="date"
+              error={errors.date_of_birth?.message}
+              {...register('date_of_birth')}
+            />
+            <Select
+              label="Gênero"
+              options={[
+                { value: 'M', label: 'Masculino' },
+                { value: 'F', label: 'Feminino' },
+                { value: 'OTHER', label: 'Outro' },
+              ]}
+              placeholder="Selecione"
+              {...register('gender')}
+            />
+            <Input
+              label="Tipo sanguíneo"
+              placeholder="O+"
+              {...register('blood_type')}
+            />
+            <div className="sm:col-span-2">
+              <Input
+                label="Telefone"
+                placeholder="+55 84 99999-0000"
+                {...register('phone')}
+              />
+            </div>
+          </div>
         </div>
       </div>
     </Modal>
@@ -193,6 +238,7 @@ export function PatientListPage() {
   const [search, setSearch] = useState('')
   const [debouncedSearch, setDebouncedSearch] = useState('')
   const [createOpen, setCreateOpen] = useState(false)
+  const queryClient = useQueryClient()
 
   // Debounce search
   const handleSearch = (value: string) => {
@@ -209,6 +255,12 @@ export function PatientListPage() {
     size: 20,
     search: debouncedSearch || undefined,
   })
+
+  const handleCreateClose = () => {
+    setCreateOpen(false)
+    // Invalidate all patient queries to force refetch
+    queryClient.invalidateQueries({ queryKey: ['patients'] })
+  }
 
   return (
     <div>
@@ -264,7 +316,7 @@ export function PatientListPage() {
                   <Th>Tipo Sang.</Th>
                   <Th>Telefone</Th>
                   <Th>Status</Th>
-                  <Th />
+                  <Th>Ações</Th>
                 </tr>
               </thead>
               <tbody>
@@ -286,7 +338,7 @@ export function PatientListPage() {
 
       <CreatePatientModal
         open={createOpen}
-        onClose={() => setCreateOpen(false)}
+        onClose={handleCreateClose}
       />
     </div>
   )

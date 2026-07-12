@@ -111,6 +111,8 @@ class AIService:
                 max_tokens=settings.LLM_MAX_TOKENS,
                 temperature=settings.LLM_TEMPERATURE,
                 redis_client=self.redis,
+                api_base_url=settings.LLM_API_BASE_URL,
+                json_mode=settings.LLM_JSON_MODE,
             )
         return self._llm_client
 

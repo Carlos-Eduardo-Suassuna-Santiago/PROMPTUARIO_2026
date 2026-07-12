@@ -11,8 +11,11 @@ from app.domain.models.schemas import (
     DeactivateUserRequest,
     DoctorListResponse,
     DoctorResponse,
+    ForgotPasswordRequest,
     LoginRequest,
+    PatientRegisterRequest,
     RefreshRequest,
+    ResetPasswordRequest,
     TokenResponse,
     UserCreate,
     UserListResponse,
@@ -84,6 +87,50 @@ async def change_password(
         await svc.change_password(user.sub, body.current_password, body.new_password)
 
 
+@auth_router.post(
+    "/forgot-password",
+    summary="Solicitar redefinição de senha",
+)
+async def forgot_password(body: ForgotPasswordRequest, request: Request):
+    sf, pub, redis = _get_services(request)
+    async with sf() as session:
+        svc = AuthService(session, pub, redis)
+        return await svc.forgot_password(body.email)
+
+
+@auth_router.post(
+    "/reset-password",
+    summary="Redefinir senha com token",
+)
+async def reset_password(body: ResetPasswordRequest, request: Request):
+    sf, pub, redis = _get_services(request)
+    async with sf() as session:
+        svc = AuthService(session, pub, redis)
+        return await svc.reset_password(body.token, body.new_password)
+
+
+@auth_router.post(
+    "/register-patient",
+    response_model=UserResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Auto-cadastro de paciente",
+)
+async def register_patient(body: PatientRegisterRequest, request: Request):
+    sf, pub, _ = _get_services(request)
+    async with sf() as session:
+        svc = UserService(session, pub)
+        user = await svc.register_patient(
+            email=body.email,
+            password=body.password,
+            full_name=body.full_name,
+            cpf=body.cpf,
+            date_of_birth=body.date_of_birth,
+            gender=body.gender,
+            phone=body.phone,
+        )
+        return UserResponse.model_validate(user)
+
+
 # ─── Users endpoints ──────────────────────────────────────────────────────────
 
 @users_router.get(
@@ -116,13 +163,19 @@ async def list_users(
     response_model=UserResponse,
     status_code=status.HTTP_201_CREATED,
     summary="Criar usuário",
-    dependencies=[Depends(require_roles("ADMIN"))],
+    dependencies=[Depends(require_roles("ADMIN", "ATTENDANT"))],
 )
-async def create_user(body: UserCreate, request: Request):
+async def create_user(body: UserCreate, request: Request, current_user=Depends(get_current_user)):
     sf, pub, _ = _get_services(request)
     async with sf() as session:
         svc = UserService(session, pub)
-        user = await svc.create_user(body.email, body.password, body.full_name, body.role)
+        # ATTENDANT só pode criar usuários com role PATIENT
+        if current_user.role == "ATTENDANT" and body.role != "PATIENT":
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Atendente só pode cadastrar pacientes",
+            )
+        user = await svc.create_user(body.email, body.password, body.full_name, body.role, body.cpf)
         return UserResponse.model_validate(user)
 
 
@@ -182,7 +235,7 @@ async def update_user(
     async with sf() as session:
         svc = UserService(session, pub)
         return UserResponse.model_validate(
-            await svc.update_user(user_id, body.full_name, body.email)
+            await svc.update_user(user_id, body.full_name, body.email, body.cpf)
         )
 
 

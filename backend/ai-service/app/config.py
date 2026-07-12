@@ -22,10 +22,12 @@ class Settings(BaseSettings):
 
     # LLM configuration
     LLM_API_KEY: str = ""
+    LLM_API_BASE_URL: str = "https://api.openai.com/v1"
     LLM_MODEL: str = "gpt-4o-mini"
     LLM_MAX_TOKENS: int = 1000
     LLM_TEMPERATURE: float = 0.1
     LLM_TIMEOUT_SECONDS: int = 60
+    LLM_JSON_MODE: bool = True  # Some providers like Groq may not support response_format
 
     # Retry configuration
     LLM_RETRY_MAX_ATTEMPTS: int = 3

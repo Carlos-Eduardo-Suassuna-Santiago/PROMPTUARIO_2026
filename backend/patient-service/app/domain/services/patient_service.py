@@ -113,6 +113,7 @@ class PatientService:
                 blood_type=patient.blood_type,
             )
         )
+        await self.repo.session.commit()
         return patient
 
     async def get(self, patient_id: str) -> Patient:
@@ -146,6 +147,7 @@ class PatientService:
         changed = []
         fields = {
             "full_name": data.full_name,
+            "cpf": data.cpf,
             "date_of_birth": data.date_of_birth,
             "gender": data.gender,
             "blood_type": data.blood_type,
@@ -154,6 +156,15 @@ class PatientService:
         }
         for field, value in fields.items():
             if value is not None and getattr(patient, field) != value:
+                if current_role == "PATIENT" and field in ["date_of_birth", "gender", "blood_type", "cpf"]:
+                    if getattr(patient, field) is not None:
+                        raise HTTPException(
+                            status_code=403,
+                            detail=f"O campo {field} não pode ser alterado após ser salvo."
+                        )
+                if field == "cpf" and value is not None:
+                    if await self.repo.exists_cpf(value):
+                        raise HTTPException(status_code=409, detail="CPF já cadastrado")
                 setattr(patient, field, value)
                 changed.append(field)
 
@@ -192,6 +203,7 @@ class PatientService:
                     phone=patient.phone,
                 )
             )
+            await self.repo.session.commit()
         return patient
 
     async def deactivate(self, patient_id: str) -> None:
@@ -208,6 +220,7 @@ class PatientService:
             record_id=patient_id,
             new_values={"is_active": False},
         )
+        await self.repo.session.commit()
 
     async def anonymize(self, patient_id: str) -> None:
         """LGPD right-to-erasure: replace PII with hashed tokens and hide documents."""
@@ -244,6 +257,7 @@ class PatientService:
         for doc in docs:
             await doc_repo.soft_delete(doc)
         logger.info("Patient %s anonymized: %d documents soft-deleted", patient_id, len(docs))
+        await self.repo.session.commit()
 
 
 class AllergyService:
@@ -451,6 +465,13 @@ class MedicationService:
         await self.history_repo.create(history)
         return med
 
+    async def delete(self, patient_id: str, med_id: str) -> None:
+        """Permanently delete a medication record."""
+        med = await self.repo.get(med_id, patient_id)
+        if not med:
+            raise HTTPException(status_code=404, detail="Medicamento não encontrado")
+        await self.repo.delete(med)
+
     async def reactivate(self, patient_id: str, med_id: str, changed_by: str | None = None) -> ContinuousMedication:
         med = await self.repo.get(med_id, patient_id)
         if not med:
@@ -593,6 +614,10 @@ class DocumentService:
                 },
                 ExpiresIn=settings.S3_PRESIGNED_URL_EXPIRY,
             )
+            if "http://minio:9000" in url:
+                url = url.replace("http://minio:9000", settings.S3_PUBLIC_ENDPOINT)
+            elif settings.S3_ENDPOINT in url and hasattr(settings, "S3_PUBLIC_ENDPOINT") and settings.S3_PUBLIC_ENDPOINT:
+                url = url.replace(settings.S3_ENDPOINT, settings.S3_PUBLIC_ENDPOINT)
             return url
         except ClientError as e:
             logger.error("S3 pre-signed URL generation failed: %s", e)

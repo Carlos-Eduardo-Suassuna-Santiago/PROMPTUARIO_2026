@@ -34,6 +34,24 @@ export const authApi = {
   // OAuth — list linked accounts
   listOAuthAccounts: () =>
     api.get<{ accounts: Array<{ provider: string; email: string }> }>('/auth/oauth/accounts').then(r => r.data),
+
+  // Password reset
+  forgotPassword: (email: string) =>
+    api.post<{ message: string; reset_token?: string }>('/auth/forgot-password', { email }).then(r => r.data),
+
+  resetPassword: (token: string, new_password: string) =>
+    api.post<{ message: string }>('/auth/reset-password', { token, new_password }).then(r => r.data),
+
+  // Patient self-registration
+  registerPatient: (data: {
+    email: string
+    password: string
+    full_name: string
+    cpf?: string
+    date_of_birth?: string
+    gender?: string
+    phone?: string
+  }) => api.post<User>('/auth/register-patient', data).then(r => r.data),
 }
 
 // ─── Users ─────────────────────────────────────────────────────────────────
@@ -65,6 +83,8 @@ export const patientsApi = {
     api.get<PaginatedResponse<Patient>>('/patients', { params }).then(r => r.data),
 
   get: (id: string) => api.get<Patient>(`/patients/${id}`).then(r => r.data),
+
+  me: () => api.get<Patient>('/patients/me').then(r => r.data),
 
   summary: (id: string) =>
     api.get<PatientSummary>(`/patients/${id}/summary`).then(r => r.data),
@@ -100,7 +120,7 @@ export const patientsApi = {
       params: { active_only },
     }).then(r => r.data),
 
-  addMedication: (patientId: string, data: Partial<ContinuousMedication>) =>
+  addMedication: (patientId: string, data: { name: string; dosage: string; frequency: string; prescribing_doctor?: string; started_at?: string; notes?: string }) =>
     api.post<ContinuousMedication>(`/patients/${patientId}/medications`, data).then(r => r.data),
 
   deleteMedication: (patientId: string, medId: string) =>
@@ -121,6 +141,9 @@ export const appointmentsApi = {
 
   cancel: (id: string, reason: string) =>
     api.put<Appointment>(`/appointments/${id}/cancel`, { reason }).then(r => r.data),
+
+  confirm: (id: string) =>
+    api.put<Appointment>(`/appointments/${id}/confirm`).then(r => r.data),
 
   complete: (id: string) =>
     api.put<Appointment>(`/appointments/${id}/complete`).then(r => r.data),
@@ -192,7 +215,7 @@ export const reportsApi = {
     api.get<ReportJob>(`/reports/export/${jobId}`).then(r => r.data),
 
   downloadExport: (jobId: string) =>
-    api.get(`/reports/export/${jobId}/download`, { responseType: 'blob' }),
+    api.get(`/reports/export/${jobId}/download`),
 }
 
 // ─── Audit ──────────────────────────────────────────────────────────────────

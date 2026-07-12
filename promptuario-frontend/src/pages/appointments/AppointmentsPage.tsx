@@ -4,7 +4,7 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { Calendar, Plus, X, CheckCircle, Clock, Search } from 'lucide-react'
 import {
-  useAppointments, useCreateAppointment, useCancelAppointment,
+  useAppointments, useCreateAppointment, useCancelAppointment, useConfirmAppointment,
   usePatients, useDoctors,
 } from '@/hooks'
 import { PageHeader } from '@/components/layout/AppShell'
@@ -187,10 +187,12 @@ function AppointmentRow({
   appt,
   canCancel,
   onCancel,
+  onConfirm,
 }: {
   appt: Appointment
   canCancel: boolean
   onCancel: (appt: Appointment) => void
+  onConfirm: (appt: Appointment) => void
 }) {
   return (
     <tr className="hover:bg-slate-800/20 transition-colors">
@@ -212,16 +214,29 @@ function AppointmentRow({
         </Badge>
       </Td>
       <Td>
-        {canCancel && appt.status === 'SCHEDULED' && (
-          <Button
-            variant="ghost"
-            size="sm"
-            icon={<X className="w-3.5 h-3.5" />}
-            onClick={() => onCancel(appt)}
-          >
-            Cancelar
-          </Button>
-        )}
+        <div className="flex items-center gap-2 justify-end">
+          {appt.status === 'SCHEDULED' && (
+            <Button
+              variant="ghost"
+              size="sm"
+              icon={<CheckCircle className="w-3.5 h-3.5 text-brand-400" />}
+              onClick={() => onConfirm(appt)}
+            >
+              Confirmar
+            </Button>
+          )}
+          {canCancel && appt.status === 'SCHEDULED' && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-red-400 hover:text-red-300 hover:bg-red-400/10"
+              icon={<X className="w-3.5 h-3.5" />}
+              onClick={() => onCancel(appt)}
+            >
+              Cancelar
+            </Button>
+          )}
+        </div>
       </Td>
     </tr>
   )
@@ -238,17 +253,28 @@ export function AppointmentsPage() {
   const canCreate = role === 'ADMIN' || role === 'ATTENDANT' || role === 'PATIENT'
   const canCancel = true // all roles can cancel (business rules enforced backend-side)
 
+  const confirm = useConfirmAppointment()
+
   const { data, isLoading } = useAppointments({
     page,
     size: 20,
     status: statusFilter || undefined,
   })
 
+  const handleConfirm = async (appt: Appointment) => {
+    try {
+      await confirm.mutateAsync(appt.id)
+    } catch (err) {
+      console.error(err)
+      alert(getErrorMessage(err))
+    }
+  }
+
   return (
     <div>
       <PageHeader
         title="Consultas"
-        description={`${data?.total ?? 0} consultas no sistema`}
+        description="Gerencie sua agenda de atendimentos, agendamentos e retornos."
         action={
           canCreate ? (
             <Button icon={<Plus className="w-4 h-4" />} onClick={() => setCreateOpen(true)}>
@@ -260,12 +286,16 @@ export function AppointmentsPage() {
 
       <Card>
         <CardHeader>
-          <div className="flex flex-wrap items-center gap-3">
-            <div className="flex gap-2">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <h3 className="font-semibold text-slate-200">Próximos Agendamentos</h3>
+            <div className="flex bg-slate-800/50 p-1 rounded-lg border border-slate-700/50">
               {['', 'SCHEDULED', 'CONFIRMED', 'COMPLETED', 'CANCELLED'].map((s) => (
                 <button
                   key={s}
-                  onClick={() => { setStatusFilter(s); setPage(1) }}
+                  onClick={() => {
+                    setStatusFilter(s)
+                    setPage(1)
+                  }}
                   className={cn(
                     'px-3 py-1.5 rounded-lg text-xs font-medium transition-all',
                     statusFilter === s
@@ -305,7 +335,7 @@ export function AppointmentsPage() {
                   <Th>Tipo</Th>
                   <Th>Especialidade</Th>
                   <Th>Status</Th>
-                  <Th />
+                  <Th>Ações</Th>
                 </tr>
               </thead>
               <tbody>
@@ -315,6 +345,7 @@ export function AppointmentsPage() {
                     appt={appt}
                     canCancel={canCancel}
                     onCancel={setCancelTarget}
+                    onConfirm={handleConfirm}
                   />
                 ))}
               </tbody>

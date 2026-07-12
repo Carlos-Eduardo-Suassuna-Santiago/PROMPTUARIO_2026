@@ -7,8 +7,12 @@ from datetime import datetime, timedelta, timezone
 from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+import secrets
+
 from app.config import settings
+from app.domain.models.password_reset import PasswordResetToken
 from app.domain.models.user import RefreshToken, User
+from app.infrastructure.repositories.password_reset_repository import PasswordResetRepository
 from app.infrastructure.repositories.user_repository import (
     RefreshTokenRepository,
     UserRepository,
@@ -247,6 +251,74 @@ class AuthService:
         )
         await self.session.commit()
 
+    async def forgot_password(self, email: str) -> dict:
+        """Generate a password reset token for the given email."""
+        user = await self.user_repo.get_by_email(email)
+        # Always return success to avoid email enumeration
+        if not user:
+            return {"message": "Se o email estiver cadastrado, você receberá um link para redefinir sua senha."}
+
+        # Invalidate any existing tokens for this user
+        reset_repo = PasswordResetRepository(self.session)
+        await reset_repo.invalidate_all_for_user(user.id)
+
+        # Generate a secure random token
+        raw_token = secrets.token_urlsafe(48)
+        token_hash = hashlib.sha256(raw_token.encode()).hexdigest()
+
+        reset_token = PasswordResetToken(
+            id=str(uuid.uuid4()),
+            user_id=user.id,
+            token_hash=token_hash,
+            expires_at=datetime.now(timezone.utc) + timedelta(hours=1),
+        )
+        await reset_repo.save(reset_token)
+        await self.session.commit()
+
+        # In production, send email with reset link
+        # For now, return the token in the response for development/testing
+        return {
+            "message": "Se o email estiver cadastrado, você receberá um link para redefinir sua senha.",
+            "reset_token": raw_token,  # Only returned in dev; remove in production
+        }
+
+    async def reset_password(self, token: str, new_password: str) -> dict:
+        """Reset password using a valid reset token."""
+        reset_repo = PasswordResetRepository(self.session)
+        reset_token = await reset_repo.get_valid(token)
+        if not reset_token:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Token inválido ou expirado",
+            )
+
+        user = await self.user_repo.get_by_id(reset_token.user_id)
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Usuário não encontrado",
+            )
+
+        # Update password
+        user.hashed_password = hash_password(new_password)
+        await self.user_repo.update(user)
+
+        # Mark token as used and revoke all sessions
+        await reset_repo.mark_used(token)
+        await self.token_repo.revoke_all_for_user(user.id)
+
+        await log_operation(
+            self.session,
+            service="iam-service",
+            table="users",
+            operation="PASSWORD_RESET",
+            record_id=user.id,
+            user_id=user.id,
+        )
+        await self.session.commit()
+
+        return {"message": "Senha redefinida com sucesso."}
+
 
 class UserService:
     def __init__(self, session: AsyncSession, publisher: EventPublisher):
@@ -255,16 +327,22 @@ class UserService:
         self.publisher = publisher
 
     async def create_user(
-        self, email: str, password: str, full_name: str, role: str
+        self, email: str, password: str, full_name: str, role: str, cpf: str | None = None
     ) -> User:
         if await self.user_repo.exists_by_email(email):
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
                 detail="Email já cadastrado",
             )
+        if cpf and await self.user_repo.exists_by_cpf(cpf):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="CPF já cadastrado",
+            )
         user = User(
             id=str(uuid.uuid4()),
             email=email.lower(),
+            cpf=cpf,
             hashed_password=hash_password(password),
             full_name=full_name,
             role=role,
@@ -302,7 +380,7 @@ class UserService:
         return await self.user_repo.list_users(page, size, role, is_active)
 
     async def update_user(
-        self, user_id: str, full_name: str | None, email: str | None
+        self, user_id: str, full_name: str | None, email: str | None, cpf: str | None = None
     ) -> User:
         user = await self.get_user(user_id)
         changed = []
@@ -314,6 +392,11 @@ class UserService:
                 raise HTTPException(status_code=409, detail="Email já em uso")
             user.email = email.lower()
             changed.append("email")
+        if cpf and cpf != user.cpf:
+            if await self.user_repo.exists_by_cpf(cpf):
+                raise HTTPException(status_code=409, detail="CPF já cadastrado")
+            user.cpf = cpf
+            changed.append("cpf")
         if changed:
             user = await self.user_repo.update(user)
             await log_operation(
@@ -340,6 +423,57 @@ class UserService:
         user.role = role
         user = await self.user_repo.update(user)
         await self.session.commit()
+        return user
+
+    async def register_patient(
+        self, email: str, password: str, full_name: str,
+        cpf: str | None = None, date_of_birth: str | None = None,
+        gender: str | None = None, phone: str | None = None,
+    ) -> User:
+        """Register a new patient user (self-registration)."""
+        if await self.user_repo.exists_by_email(email):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Email já cadastrado",
+            )
+        if cpf and await self.user_repo.exists_by_cpf(cpf):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="CPF já cadastrado",
+            )
+        user = User(
+            id=str(uuid.uuid4()),
+            email=email.lower(),
+            cpf=cpf,
+            hashed_password=hash_password(password),
+            full_name=full_name,
+            role="PATIENT",
+        )
+        user = await self.user_repo.create(user)
+        await log_operation(
+            self.session,
+            service="iam-service",
+            table="users",
+            operation="INSERT",
+            record_id=user.id,
+            new_values={"email": user.email, "role": user.role, "full_name": user.full_name},
+        )
+        await self.session.commit()
+        users_registered_total.labels(
+            service=_settings.SERVICE_NAME, role=user.role
+        ).inc()
+        await self.publisher.publish(
+            UserCreatedEvent(
+                user_id=user.id,
+                email=user.email,
+                role=user.role,
+                full_name=user.full_name,
+                cpf=cpf,
+                date_of_birth=date_of_birth,
+                gender=gender,
+                phone=phone,
+            )
+        )
         return user
 
     async def deactivate_user(

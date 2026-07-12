@@ -307,6 +307,16 @@ class AppointmentService:
         )
         return appt
 
+    async def confirm(self, appt_id: str) -> Appointment:
+        appt = await self.repo.get(appt_id)
+        if not appt:
+            raise HTTPException(status_code=404, detail="Consulta não encontrada")
+        if appt.status not in ("SCHEDULED",):
+            raise HTTPException(status_code=400, detail=f"Não é possível confirmar uma consulta {appt.status}")
+        
+        appt.status = "CONFIRMED"
+        return await self.repo.update(appt)
+
     async def complete(self, appt_id: str) -> Appointment:
         appt = await self.get(appt_id)
         if appt.status not in ("SCHEDULED", "CONFIRMED"):
@@ -633,6 +643,10 @@ class PrescriptionService:
                 },
                 ExpiresIn=settings.S3_PRESIGNED_URL_EXPIRY,
             )
+            if "http://minio:9000" in url:
+                url = url.replace("http://minio:9000", settings.S3_PUBLIC_ENDPOINT)
+            elif settings.S3_ENDPOINT in url and hasattr(settings, "S3_PUBLIC_ENDPOINT") and settings.S3_PUBLIC_ENDPOINT:
+                url = url.replace(settings.S3_ENDPOINT, settings.S3_PUBLIC_ENDPOINT)
             return url
         except ClientError as e:
             logger.error("S3 pre-signed URL generation failed: %s", e)

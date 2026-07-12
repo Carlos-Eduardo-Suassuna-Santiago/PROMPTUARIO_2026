@@ -13,6 +13,7 @@ from app.domain.models.schemas import (
 from app.domain.services.patient_service import (
     AllergyService, DocumentService, MedicationService, PatientService, VaccineService,
 )
+from shared.audit import log_operation
 from shared.metrics import (
     patients_registered_total, patients_active_total,
     allergies_registered_total, vaccines_registered_total,
@@ -295,6 +296,30 @@ async def reactivate_medication(
         svc = MedicationService(session, _pub(request))
         return MedicationResponse.model_validate(
             await svc.reactivate(patient_id, med_id, changed_by=user.sub)
+        )
+
+
+@router.delete(
+    "/{patient_id}/medications/{med_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(require_roles("ADMIN", "DOCTOR"))],
+)
+async def delete_medication(
+    patient_id: str, med_id: str, request: Request,
+    user=Depends(get_current_user),
+):
+    """Delete a medication record permanently."""
+    async with _sf(request)() as session:
+        svc = MedicationService(session, _pub(request))
+        await svc.delete(patient_id, med_id)
+        await log_operation(
+            session,
+            service="patient-service",
+            table="continuous_medications",
+            operation="DELETE",
+            record_id=med_id,
+            user_id=user.sub,
+            new_values={"patient_id": patient_id},
         )
 
 
