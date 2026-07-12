@@ -23,7 +23,7 @@ class ReportJob(Base):
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
     report_type: Mapped[str] = mapped_column(
         Enum(
-            "CONSULTATIONS", "PATIENTS", "DOCTORS", "PRESCRIPTIONS", "CUSTOM",
+            "CONSULTATIONS", "PATIENTS", "DOCTORS", "PRESCRIPTIONS", "CUSTOM", "FULL_SYSTEM",
             name="report_type"
         ),
         nullable=False,
@@ -117,7 +117,7 @@ class ReportAuditLog(Base):
     entity_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     description: Mapped[str] = mapped_column(String(500), default="")
     performed_by: Mapped[str] = mapped_column(String(36), nullable=False)
-    metadata: Mapped[dict] = mapped_column(JSON, default=dict)
+    event_metadata: Mapped[dict] = mapped_column(JSON, default=dict)
     ip_address: Mapped[str | None] = mapped_column(String(45), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, index=True)
 

@@ -35,6 +35,7 @@ import random
 import sys
 import time
 from datetime import date, datetime, timedelta, timezone
+import threading
 from typing import Any
 from urllib import error, request
 
@@ -435,6 +436,7 @@ def main():
 
     def cadastrar_paciente(item: dict[str, Any]) -> dict[str, Any]:
         email = item["email"].lower()
+        u_id = None
         if email in usuarios_existentes:
             u_id = usuarios_existentes[email]
         else:
@@ -443,46 +445,59 @@ def main():
                 "password": item["password"],
                 "full_name": item["full_name"],
                 "role": item["role"],
-                "cpf": item["cpf"]  # Send CPF to IAM so it's included in UserCreatedEvent
+                "cpf": item["cpf"]
             }, token=token)
             if st in (200, 201):
                 u_id = r["id"]
             elif st == 409:
-                u_id = f"exist-user-{item['idx']}"
-            else:
-                return {"error": r}
+                st_l, r_l = http_request("POST", f"{iam_url}/auth/login", body={"email": item["email"], "password": item["password"]})
+                if st_l == 200 and "access_token" in r_l:
+                    st_m, r_m = http_request("GET", f"{iam_url}/users/me", token=r_l["access_token"])
+                    if st_m == 200 and "id" in r_m:
+                        u_id = r_m["id"]
+            if not u_id:
+                return {"error": f"Falha ao obter user_id para {email}"}
 
-        if u_id.startswith("exist-user"):
-            return {"user_id": u_id, "patient_id": f"pat-fallback-{item['idx']}", "name": item["full_name"], "idx": item["idx"]}
-
-        # 1. Login as the new patient to get their token
-        st_l, r_l = http_request("POST", f"{iam_url}/auth/login", body={"email": item["email"], "password": item["password"]})
-        if st_l != 200 or "access_token" not in r_l:
-            return {"error": f"Login failed for {email}"}
-        
-        pat_token = r_l["access_token"]
-        pat_id = None
-        
-        # 2. Poll GET /patients/me until the RabbitMQ consumer creates the patient
-        for _ in range(10):
-            st_me, r_me = http_request("GET", f"{patient_url}/patients/me", token=pat_token)
-            if st_me == 200 and "id" in r_me:
-                pat_id = r_me["id"]
-                break
-            time.sleep(0.5)
-
-        if not pat_id:
-            # Fallback if event consumer fails
-            return {"user_id": u_id, "patient_id": f"pat-fallback-{item['idx']}", "name": item["full_name"], "idx": item["idx"]}
-
-        # 3. Update the missing fields (blood_type, address, phone, date_of_birth, gender) via PUT
-        st_u, r_u = http_request("PUT", f"{patient_url}/patients/{pat_id}", body={
+        # Criação direta do perfil na base de pacientes via token administrativo
+        body_pat = {
+            "user_id": u_id,
+            "full_name": item["full_name"],
+            "cpf": item["cpf"],
             "date_of_birth": item["date_of_birth"],
             "gender": item["gender"],
             "blood_type": item["blood_type"],
             "phone": item["phone"],
+            "email": item["email"],
             "address": item["address"]
-        }, token=pat_token)
+        }
+        st_p, r_p = http_request("POST", f"{patient_url}/patients", body=body_pat, token=token)
+        pat_id = None
+        if st_p in (200, 201) and "id" in r_p:
+            pat_id = r_p["id"]
+        elif st_p == 409:
+            # Se já existia ou foi criado por evento, autentica brevemente o paciente ou busca pelo Admin
+            st_l, r_l = http_request("POST", f"{iam_url}/auth/login", body={"email": item["email"], "password": item["password"]})
+            if st_l == 200 and "access_token" in r_l:
+                pat_tok = r_l["access_token"]
+                for _ in range(6):
+                    st_me, r_me = http_request("GET", f"{patient_url}/patients/me", token=pat_tok)
+                    if st_me == 200 and "id" in r_me:
+                        pat_id = r_me["id"]
+                        break
+                    time.sleep(0.3)
+            if pat_id:
+                http_request("PUT", f"{patient_url}/patients/{pat_id}", body={
+                    "full_name": item["full_name"],
+                    "cpf": item["cpf"],
+                    "date_of_birth": item["date_of_birth"],
+                    "gender": item["gender"],
+                    "blood_type": item["blood_type"],
+                    "phone": item["phone"],
+                    "address": item["address"]
+                }, token=token)
+
+        if not pat_id:
+            return {"error": f"Falha ao sincronizar perfil do paciente {email}"}
 
         return {"user_id": u_id, "patient_id": pat_id, "name": item["full_name"], "idx": item["idx"]}
 
@@ -540,27 +555,27 @@ def main():
     print("      ✔ Registros de prontuário base injetados para pacientes amostrais.")
 
     # ──────────────────────────────────────────────────────────────────────────
-    # PASSO 5: Gerar Agendamentos de Consultas (300 Consultas)
     # ──────────────────────────────────────────────────────────────────────────
-    print("\n[5/6] Simulando agenda médica e consultas hospitalares (300 agendamentos)...")
+    # PASSO 5: Gerar Agendamentos de Consultas (450 Consultas Realistas)
+    # ──────────────────────────────────────────────────────────────────────────
+    print("\n[5/6] Simulando agenda médica e consultas hospitalares (450 agendamentos)...")
     
     agendamentos_massa = []
     tipos_consulta = ["CONSULTATION", "RETURN", "EXAM", "URGENT"]
     agora_utc = datetime.now(timezone.utc)
 
-    for a_idx in range(300):
+    for a_idx in range(450):
         pac_escolhido = random.choice(pacientes_cadastrados)
         med_escolhido = random.choice(medicos_cadastrados)
         tipo = random.choice(tipos_consulta)
         
-        # Variar entre consultas passadas (para virar prontuário) e futuras
-        dias_offset = random.randint(-15, 10)
+        dias_offset = random.randint(-20, 15)
         hora_c = random.choice([8, 9, 10, 11, 14, 15, 16, 17])
         dt_agendada = (agora_utc + timedelta(days=dias_offset)).replace(hour=hora_c, minute=0, second=0, microsecond=0)
         dt_str = dt_agendada.strftime("%Y-%m-%dT%H:%M:%SZ")
 
         if dias_offset <= 0:
-            target_status = random.choices(["COMPLETED", "CANCELLED", "SCHEDULED"], weights=[75, 15, 10])[0]
+            target_status = random.choices(["COMPLETED", "CANCELLED", "CONFIRMED"], weights=[70, 15, 15])[0]
         else:
             target_status = random.choices(["SCHEDULED", "CONFIRMED", "CANCELLED"], weights=[40, 50, 10])[0]
 
@@ -611,60 +626,109 @@ def main():
     # ──────────────────────────────────────────────────────────────────────────
     print("\n[6/6] Simulando atendimento clínico: Confirmando, Cancelando e Gerando prontuários...")
     
+    doc_token_cache: dict[str, str] = {}
+    doc_lock = threading.Lock()
+
+    def get_doctor_token(doc_id: str) -> str | None:
+        with doc_lock:
+            if doc_id in doc_token_cache:
+                return doc_token_cache[doc_id]
+        doc_info = next((m for m in medicos_cadastrados if m["id"] == doc_id), None)
+        if not doc_info:
+            return None
+        st_l, r_l = http_request("POST", f"{iam_url}/auth/login", body={"email": doc_info["email"], "password": "Password@123"})
+        if st_l == 200 and "access_token" in r_l:
+            with doc_lock:
+                doc_token_cache[doc_id] = r_l["access_token"]
+            return r_l["access_token"]
+        return None
+
+    stats_clinica = {
+        "COMPLETED": 0, "CONFIRMED": 0, "CANCELLED": 0, "SCHEDULED": 0,
+        "prontuarios": 0, "prescricoes": 0, "assinaturas": 0
+    }
+    stats_lock = threading.Lock()
+
     def processar_consulta(cons: dict[str, Any]) -> None:
         c_id = cons["id"]
         doc_id = cons["doctor_id"]
         target = cons["target_status"]
 
         if target == "CANCELLED":
-            http_request("PUT", f"{clinical_url}/appointments/{c_id}/cancel", body={"reason": "Cancelamento a pedido do paciente (Simulação)"}, token=token)
+            st_c, _ = http_request("PUT", f"{clinical_url}/appointments/{c_id}/cancel", body={"reason": "Cancelamento solicitado pelo paciente por imprevisto (Simulação)"}, token=token)
+            if st_c in (200, 204):
+                with stats_lock:
+                    stats_clinica["CANCELLED"] += 1
             return
             
         if target == "CONFIRMED":
-            http_request("PUT", f"{clinical_url}/appointments/{c_id}/confirm", body={}, token=token)
+            st_c, _ = http_request("PUT", f"{clinical_url}/appointments/{c_id}/confirm", body={}, token=token)
+            if st_c in (200, 204):
+                with stats_lock:
+                    stats_clinica["CONFIRMED"] += 1
             return
 
         if target == "COMPLETED":
+            doc_tok = get_doctor_token(doc_id)
+            if not doc_tok:
+                doc_tok = token
+
             queixa = random.choice(QUEIXAS_PRONTUARIOS)
             med_pres = random.choice(MEDICAMENTOS_COMUM)
 
-            # Criar Prontuário Médico (Simulando chamada autenticada pelo próprio Médico ou com token com permissão DOCTOR)
             body_pront = {
                 "appointment_id": c_id,
                 "chief_complaint": queixa[0],
-                "anamnesis": "Paciente comparece à consulta referindo os sintomas acima. Nega febre no momento.",
-                "physical_exam": "BEG, corado, hidratado, acianótico, anictérico. PA: 120/80 mmHg. FC: 78 bpm.",
-                "diagnosis": f"Hipótese diagnóstica compatível com {queixa[2]}.",
-                "diagnosis_codes": [{"code": queixa[1], "description": queixa[2]}],
-                "treatment_plan": "Orientado repouso e início imediato da medicação prescrita.",
-                "observations": "Retorno agendado se piora clínica."
+                "anamnesis": "Paciente comparece à consulta referindo os sintomas acima há alguns dias. Nega febre, calafrios ou perda ponderal recente.",
+                "physical_exam": "BEG, corado, hidratado, acianótico, anictérico. Eupneico. PA: 120/80 mmHg, FC: 76 bpm, FR: 16 irpm, Temp: 36.5°C, SpO2: 98%. Ausculta sem alterações patológicas.",
+                "diagnosis": f"Quadro clínico compatível com {queixa[2]} ({queixa[1]}).",
+                "diagnosis_codes": [f"{queixa[1]} - {queixa[2]}"],
+                "treatment_plan": f"Orientado repouso relativo, hidratação e início imediato de {med_pres[0]} ({med_pres[2]}).",
+                "observations": "Retorno agendado para reavaliação clínica ou antes em caso de piora dos sintomas."
             }
 
-            st_p, resp_p = http_request("POST", f"{clinical_url}/records", body=body_pront, token=token)
-            
-            # Se der 403 (médico diferente do logado), fazemos login rápido do médico específico
-            if st_p == 403:
-                doc_email = next((m["email"] for m in medicos_cadastrados if m["id"] == doc_id), None)
-                if doc_email:
-                    st_l, r_l = http_request("POST", f"{iam_url}/auth/login", body={"email": doc_email, "password": "Password@123"})
-                    if st_l == 200 and "access_token" in r_l:
-                        doc_tok = r_l["access_token"]
-                        st_p, resp_p = http_request("POST", f"{clinical_url}/records", body=body_pront, token=doc_tok)
-                        if st_p in (200, 201) and "id" in resp_p:
-                            # Prescrição
-                            http_request("POST", f"{clinical_url}/records/{resp_p['id']}/prescriptions", body={
-                                "medications": [{"name": med_pres[0], "dosage": med_pres[1], "frequency": med_pres[2]}],
-                                "instructions": "Uso contínuo conforme orientação médica."
-                            }, token=doc_tok)
+            st_p, resp_p = http_request("POST", f"{clinical_url}/records", body=body_pront, token=doc_tok)
+            if st_p in (200, 201) and isinstance(resp_p, dict) and "id" in resp_p:
+                rec_id = resp_p["id"]
+                with stats_lock:
+                    stats_clinica["COMPLETED"] += 1
+                    stats_clinica["prontuarios"] += 1
+
+                # Prescrição Digital
+                st_rx, _ = http_request("POST", f"{clinical_url}/records/{rec_id}/prescriptions", body={
+                    "medications": [{
+                        "name": med_pres[0],
+                        "dosage": med_pres[1],
+                        "frequency": med_pres[2],
+                        "duration_days": random.choice([7, 14, 30, 60]),
+                        "instructions": "Uso contínuo conforme orientação e horários prescritos."
+                    }],
+                    "valid_days": 30,
+                    "instructions": "Recomenda-se não interromper o uso sem orientação médica."
+                }, token=doc_tok)
+                if st_rx in (200, 201):
+                    with stats_lock:
+                        stats_clinica["prescricoes"] += 1
+
+                # Assinatura Digital de Integridade do Prontuário
+                st_sg, _ = http_request("POST", f"{clinical_url}/records/{rec_id}/sign", body={}, token=doc_tok)
+                if st_sg in (200, 201):
+                    with stats_lock:
+                        stats_clinica["assinaturas"] += 1
+            else:
+                with stats_lock:
+                    stats_clinica["SCHEDULED"] += 1
+        else:
+            with stats_lock:
+                stats_clinica["SCHEDULED"] += 1
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=args.workers) as executor:
         list(executor.map(processar_consulta, consultas_criadas))
 
-    print("      ✔ Agendamentos atualizados, prontuários eletrônicos (CID-10) e prescrições digitais emitidos.")
+    print("      ✔ Agendamentos processados, prontuários eletrônicos (CID-10), prescrições e assinaturas digitais emitidos.")
 
     # ─── RESUMO FINAL DE VALIDAÇÃO ────────────────────────────────────────────
     
-    # Calcular contagem exata no banco via API
     st_u, r_u = http_request("GET", f"{iam_url}/users?page=1&size=1", token=token)
     total_db_users = r_u.get("total", TOTAL_USUARIOS) if isinstance(r_u, dict) else TOTAL_USUARIOS
 
@@ -678,11 +742,20 @@ def main():
     print(f"    └── Pacientes       : {PATIENT_COUNT} (Perfis Clínicos, CPF e Endereço)")
     print(f"    ────────────────────────────────────────────────────────")
     print(f"    TOTAL DE USUÁRIOS NO SISTEMA : {total_db_users} / {TOTAL_USUARIOS}")
+    print("--------------------------------------------------------------------")
+    print(f"  • Simulação Clínica Hospitalar (Consultas & Prontuários):")
+    print(f"    ├── Consultas Agendadas   : {len(consultas_criadas)} total criadas")
+    print(f"    ├── Consultas Concluídas  : {stats_clinica['COMPLETED']} (com Prontuário EHR)")
+    print(f"    ├── Consultas Confirmadas : {stats_clinica['CONFIRMED']}")
+    print(f"    ├── Consultas Canceladas  : {stats_clinica['CANCELLED']}")
+    print(f"    ├── Prontuários Eletrônicos : {stats_clinica['prontuarios']} (com CID-10)")
+    print(f"    ├── Prescrições Digitais   : {stats_clinica['prescricoes']}")
+    print(f"    └── Assinaturas SHA-256    : {stats_clinica['assinaturas']}")
     print("====================================================================")
     print("Credenciais de Teste:")
-    print("  Admin     : admin@promptuario.health      / Admin@12345")
-    print("  Atendente : atendente@promptuario.health  / Password@123")
-    print("  Médico    : medico01@promptuario.health   / Password@123")
+    print("  Admin     : admin@promptuario.health       / Admin@12345")
+    print("  Atendente : atendente@promptuario.health   / Password@123")
+    print("  Médico    : medico01@promptuario.health    / Password@123")
     print("  Paciente  : paciente001@promptuario.health / Password@123")
     print("====================================================================\n")
 

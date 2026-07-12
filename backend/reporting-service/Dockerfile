@@ -11,6 +11,7 @@ COPY reporting-service/requirements.txt .
 RUN pip install --default-timeout=120 --no-cache-dir -r requirements.txt
 
 COPY shared /app/shared
+COPY scripts /app/scripts
 COPY reporting-service/app ./app
 
 EXPOSE 8000

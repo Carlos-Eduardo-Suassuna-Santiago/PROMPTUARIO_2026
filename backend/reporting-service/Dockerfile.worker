@@ -13,6 +13,9 @@ RUN pip install --default-timeout=120 --no-cache-dir -r requirements.txt
 COPY shared /app/shared
 COPY reporting-service/app ./app
 
+RUN useradd -m -u 1001 appuser && chown -R appuser:appuser /app
+USER appuser
+
 # Celery worker entry point
 CMD ["celery", "-A", "app.workers.celery_tasks.celery_app", "worker", \
      "--loglevel=info", "--concurrency=4", "-Q", "celery"]

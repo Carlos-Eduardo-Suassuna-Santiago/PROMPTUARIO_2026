@@ -209,7 +209,7 @@ export const reportsApi = {
     api.get<ReportJob>(`/reports/export/${jobId}`).then(r => r.data),
 
   downloadExport: (jobId: string) =>
-    api.get(`/reports/export/${jobId}/download`, { responseType: 'blob' }),
+    api.get(`/reports/export/${jobId}/download`),
 }
 
 // ─── Audit ──────────────────────────────────────────────────────────────────

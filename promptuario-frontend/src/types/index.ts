@@ -264,8 +264,8 @@ export interface AnalysisJob {
 
 // ─── Reports ────────────────────────────────────────────────────────────────
 
-export type ReportType = 'CONSULTATIONS' | 'PATIENTS' | 'DOCTORS' | 'PRESCRIPTIONS'
-export type OutputFormat = 'JSON' | 'CSV' | 'PDF'
+export type ReportType = 'CONSULTATIONS' | 'PATIENTS' | 'DOCTORS' | 'PRESCRIPTIONS' | 'FULL_SYSTEM'
+export type OutputFormat = 'JSON' | 'CSV' | 'PDF' | 'XLSX'
 
 export interface ReportJob {
   id: string

@@ -44,16 +44,22 @@ function ExportJobStatus({ jobId }: { jobId: string }) {
   const handleDownload = async () => {
     try {
       const response = await reportsApi.downloadExport(jobId)
-      const blob = new Blob([response.data])
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = `relatorio_${job.report_type.toLowerCase()}_${jobId.slice(0, 8)}.${job.output_format.toLowerCase()}`
-      a.click()
-      URL.revokeObjectURL(url)
-    } catch {
-      // If backend redirects to S3, open in new tab
-      window.open(`${import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000/api/v1'}/reports/export/${jobId}/download`, '_blank')
+      
+      // If the response contains a JSON with 'url'
+      if (response.data && response.data.url) {
+        window.open(response.data.url, '_self')
+      } else {
+        // Fallback for Blob (if backend still returns raw file)
+        const blob = new Blob([response.data])
+        const url = URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.href = url
+        a.download = `relatorio_${job.report_type.toLowerCase()}_${jobId.slice(0, 8)}.${job.output_format.toLowerCase()}`
+        a.click()
+        URL.revokeObjectURL(url)
+      }
+    } catch (err) {
+      alert("Erro ao realizar o download do arquivo.")
     }
   }
 
@@ -74,7 +80,7 @@ function ExportJobStatus({ jobId }: { jobId: string }) {
         )}
         <div>
           <p className="text-sm font-medium text-slate-200">
-            {job.report_type} · {job.output_format}
+            {job.report_type === 'FULL_SYSTEM' ? 'RELATÓRIO COMPLETO' : job.report_type} · {job.output_format}
           </p>
           <p className="text-xs text-slate-500">
             {job.status === 'COMPLETED'
@@ -163,6 +169,7 @@ function ExportModal({
             { value: 'PATIENTS', label: 'Pacientes' },
             { value: 'DOCTORS', label: 'Médicos' },
             { value: 'PRESCRIPTIONS', label: 'Prescrições' },
+            { value: 'FULL_SYSTEM', label: 'Relatório Completo do Sistema' },
           ]}
         />
         <Select
@@ -170,7 +177,8 @@ function ExportModal({
           value={outputFormat}
           onChange={(e) => setOutputFormat(e.target.value as OutputFormat)}
           options={[
-            { value: 'CSV', label: 'CSV (Excel)' },
+            { value: 'CSV', label: 'CSV (Tabela)' },
+            { value: 'XLSX', label: 'XLSX (Planilha Excel)' },
             { value: 'PDF', label: 'PDF' },
             { value: 'JSON', label: 'JSON' },
           ]}

@@ -9,7 +9,7 @@ from pydantic import BaseModel, Field
 class ScheduleCreate(BaseModel):
     """Payload to create a recurring report schedule."""
     name: str = Field(..., min_length=1, max_length=120, description="Human-friendly name")
-    report_type: Literal["CONSULTATIONS", "PATIENTS", "DOCTORS", "PRESCRIPTIONS", "CUSTOM"]
+    report_type: Literal["CONSULTATIONS", "PATIENTS", "DOCTORS", "PRESCRIPTIONS", "CUSTOM", "FULL_SYSTEM"]
     output_format: Literal["JSON", "CSV", "PDF", "XLSX"] = "XLSX"
     cron_expression: str = Field(
         ...,
@@ -23,7 +23,7 @@ class ScheduleCreate(BaseModel):
 
 class ScheduleUpdate(BaseModel):
     name: Optional[str] = Field(None, min_length=1, max_length=120)
-    report_type: Optional[Literal["CONSULTATIONS", "PATIENTS", "DOCTORS", "PRESCRIPTIONS", "CUSTOM"]] = None
+    report_type: Optional[Literal["CONSULTATIONS", "PATIENTS", "DOCTORS", "PRESCRIPTIONS", "CUSTOM", "FULL_SYSTEM"]] = None
     output_format: Optional[Literal["JSON", "CSV", "PDF", "XLSX"]] = None
     cron_expression: Optional[str] = Field(
         None,

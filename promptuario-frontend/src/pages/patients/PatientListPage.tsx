@@ -316,7 +316,7 @@ export function PatientListPage() {
                   <Th>Tipo Sang.</Th>
                   <Th>Telefone</Th>
                   <Th>Status</Th>
-                  <Th />
+                  <Th>Ações</Th>
                 </tr>
               </thead>
               <tbody>

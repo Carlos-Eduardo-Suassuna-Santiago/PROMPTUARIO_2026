@@ -71,6 +71,16 @@ def _sf(r: Request):
     return r.app.state.session_factory
 
 
+def _format_public_url(url: Optional[str]) -> Optional[str]:
+    if not url:
+        return url
+    if "http://minio:9000" in url:
+        return url.replace("http://minio:9000", settings.S3_PUBLIC_ENDPOINT)
+    if settings.S3_ENDPOINT in url and hasattr(settings, "S3_PUBLIC_ENDPOINT") and settings.S3_PUBLIC_ENDPOINT:
+        return url.replace(settings.S3_ENDPOINT, settings.S3_PUBLIC_ENDPOINT)
+    return url
+
+
 # ─── Export (existing, extended with XLSX and CUSTOM) ────────────────────────
 
 @router.post(
@@ -98,7 +108,7 @@ async def request_report(body: ReportExportRequest, request: Request, user=Depen
             entity_id=job.id,
             description=f"Report requested: {body.report_type} ({body.output_format})",
             performed_by=user.sub,
-            metadata={"report_type": body.report_type, "output_format": body.output_format,
+            event_metadata={"report_type": body.report_type, "output_format": body.output_format,
                       "parameters": body.parameters},
             ip_address=request.client.host if request.client else None,
         ))
@@ -146,7 +156,7 @@ async def request_custom_report(body: CustomReportRequest, request: Request, use
             entity_id=job.id,
             description=f"Custom report: {body.sql_query_name} ({body.output_format})",
             performed_by=user.sub,
-            metadata={"sql_query_name": body.sql_query_name, "output_format": body.output_format,
+            event_metadata={"sql_query_name": body.sql_query_name, "output_format": body.output_format,
                       "parameters": body.parameters},
             ip_address=request.client.host if request.client else None,
         ))
@@ -181,7 +191,7 @@ async def request_multi_sheet_export(body: MultiSheetExportRequest, request: Req
             entity_id=job.id,
             description=f"Multi-sheet XLSX: {len(body.sheets)} sheets",
             performed_by=user.sub,
-            metadata={"filename": body.filename, "sheet_count": len(body.sheets)},
+            event_metadata={"filename": body.filename, "sheet_count": len(body.sheets)},
             ip_address=request.client.host if request.client else None,
         ))
         await session.commit()
@@ -232,7 +242,7 @@ async def download_report(job_id: str, request: Request):
         Params={"Bucket": settings.S3_BUCKET_REPORTS, "Key": job.s3_key},
         ExpiresIn=300,
     )
-    return RedirectResponse(url=url, status_code=302)
+    return {"url": _format_public_url(url)}
 
 
 # ─── Schedule Management ─────────────────────────────────────────────────────
@@ -270,7 +280,7 @@ async def create_schedule(body: ScheduleCreate, request: Request, user=Depends(g
             entity_id=sched.id,
             description=f"Schedule created: {body.name} ({body.cron_expression})",
             performed_by=user.sub,
-            metadata={"name": body.name, "report_type": body.report_type,
+            event_metadata={"name": body.name, "report_type": body.report_type,
                       "cron_expression": body.cron_expression},
             ip_address=request.client.host if request.client else None,
         ))
@@ -341,7 +351,7 @@ async def update_schedule(schedule_id: str, body: ScheduleUpdate, request: Reque
             entity_id=sched.id,
             description=f"Schedule updated: {sched.name}",
             performed_by=user.sub,
-            metadata={"updated_fields": list(update_data.keys())},
+            event_metadata={"updated_fields": list(update_data.keys())},
             ip_address=request.client.host if request.client else None,
         ))
         await session.commit()
@@ -410,7 +420,7 @@ async def trigger_schedule_now(schedule_id: str, request: Request, user=Depends(
             entity_id=schedule_id,
             description=f"Manual trigger of schedule: {sched.name}",
             performed_by=user.sub,
-            metadata={"job_id": job.id},
+            event_metadata={"job_id": job.id},
             ip_address=request.client.host if request.client else None,
         ))
         await session.commit()
@@ -454,7 +464,7 @@ async def create_webhook(body: WebhookConfigCreate, request: Request, user=Depen
             entity_id=wh.id,
             description=f"Webhook created: {wh.url}",
             performed_by=user.sub,
-            metadata={"url": str(body.url), "events": body.events},
+            event_metadata={"url": str(body.url), "events": body.events},
             ip_address=request.client.host if request.client else None,
         ))
         await session.commit()
@@ -515,7 +525,7 @@ async def update_webhook(webhook_id: str, body: WebhookConfigUpdate, request: Re
             entity_id=wh.id,
             description=f"Webhook updated: {wh.url}",
             performed_by=user.sub,
-            metadata={"updated_fields": list(update_data.keys())},
+            event_metadata={"updated_fields": list(update_data.keys())},
             ip_address=request.client.host if request.client else None,
         ))
         await session.commit()
@@ -585,7 +595,7 @@ async def list_webhook_deliveries(
 
 # ─── Audit Logs (Reporting-specific) ─────────────────────────────────────────
 
-audit_router = APIRouter(prefix="/audit", tags=["Auditoria"])
+audit_router = APIRouter(prefix="/reports/audit", tags=["Auditoria de Relatórios"])
 
 
 @audit_router.get(
@@ -609,9 +619,17 @@ async def get_report_audit_logs(
         if entity_type:
             q = q.where(ReportAuditLog.entity_type == entity_type)
         if from_date:
-            q = q.where(ReportAuditLog.created_at >= from_date)
+            try:
+                dt_f = datetime.strptime(from_date[:10], "%Y-%m-%d").replace(tzinfo=timezone.utc)
+                q = q.where(ReportAuditLog.created_at >= dt_f)
+            except ValueError:
+                pass
         if to_date:
-            q = q.where(ReportAuditLog.created_at <= to_date)
+            try:
+                dt_t = datetime.strptime(to_date[:10], "%Y-%m-%d").replace(hour=23, minute=59, second=59, tzinfo=timezone.utc)
+                q = q.where(ReportAuditLog.created_at <= dt_t)
+            except ValueError:
+                pass
 
         total_result = await session.execute(select(func.count()).select_from(q.subquery()))
         total = total_result.scalar() or 0
@@ -623,7 +641,20 @@ async def get_report_audit_logs(
         items = result.scalars().all()
 
         return {
-            "items": [AuditEntryResponse.model_validate(a) for a in items],
+            "items": [
+                {
+                    "id": a.id,
+                    "event_type": a.event_type,
+                    "entity_type": a.entity_type,
+                    "entity_id": a.entity_id,
+                    "description": a.description,
+                    "performed_by": a.performed_by,
+                    "metadata": a.event_metadata or {},
+                    "ip_address": a.ip_address,
+                    "created_at": a.created_at,
+                }
+                for a in items
+            ],
             "total": total,
             "page": page,
             "size": size,
@@ -645,27 +676,36 @@ async def get_report_audit_summary(
     if not to_date:
         to_date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
 
+    try:
+        dt_f = datetime.strptime(from_date[:10], "%Y-%m-%d").replace(tzinfo=timezone.utc)
+    except ValueError:
+        dt_f = datetime.now(timezone.utc) - timedelta(days=30)
+    try:
+        dt_t = datetime.strptime(to_date[:10], "%Y-%m-%d").replace(hour=23, minute=59, second=59, tzinfo=timezone.utc)
+    except ValueError:
+        dt_t = datetime.now(timezone.utc)
+
     async with _sf(request)() as session:
         rows = await session.execute(
             select(ReportAuditLog.event_type, func.count().label("cnt"))
-            .where(ReportAuditLog.created_at >= from_date)
-            .where(ReportAuditLog.created_at <= to_date)
+            .where(ReportAuditLog.created_at >= dt_f)
+            .where(ReportAuditLog.created_at <= dt_t)
             .group_by(ReportAuditLog.event_type)
         )
         by_event = {r.event_type: r.cnt for r in rows.fetchall()}
 
         user_rows = await session.execute(
             select(ReportAuditLog.performed_by, func.count().label("cnt"))
-            .where(ReportAuditLog.created_at >= from_date)
-            .where(ReportAuditLog.created_at <= to_date)
+            .where(ReportAuditLog.created_at >= dt_f)
+            .where(ReportAuditLog.created_at <= dt_t)
             .group_by(ReportAuditLog.performed_by)
         )
         by_user = {r.performed_by: r.cnt for r in user_rows.fetchall()}
 
         total_result = await session.execute(
             select(func.count(ReportAuditLog.id))
-            .where(ReportAuditLog.created_at >= from_date)
-            .where(ReportAuditLog.created_at <= to_date)
+            .where(ReportAuditLog.created_at >= dt_f)
+            .where(ReportAuditLog.created_at <= dt_t)
         )
         total = total_result.scalar() or 0
 
@@ -777,6 +817,11 @@ def _get_db_urls() -> dict[str, str]:
 
 
 @audit_cross_router.get(
+    "/logs",
+    summary="Consultar logs de auditoria (cross-service)",
+    dependencies=[Depends(require_roles("ADMIN"))],
+)
+@audit_cross_router.get(
     "/cross/logs",
     summary="Consultar logs de auditoria (cross-service)",
     dependencies=[Depends(require_roles("ADMIN"))],
@@ -813,11 +858,19 @@ async def get_audit_logs(
                     conditions.append(f"user_id = ${len(values)+1}")
                     values.append(user_id)
                 if from_date:
-                    conditions.append(f"timestamp::date >= ${len(values)+1}::date")
-                    values.append(from_date)
+                    try:
+                        dt_from = datetime.strptime(from_date[:10], "%Y-%m-%d").date()
+                        conditions.append(f"timestamp::date >= ${len(values)+1}")
+                        values.append(dt_from)
+                    except ValueError:
+                        pass
                 if to_date:
-                    conditions.append(f"timestamp::date <= ${len(values)+1}::date")
-                    values.append(to_date)
+                    try:
+                        dt_to = datetime.strptime(to_date[:10], "%Y-%m-%d").date()
+                        conditions.append(f"timestamp::date <= ${len(values)+1}")
+                        values.append(dt_to)
+                    except ValueError:
+                        pass
 
                 where = " AND ".join(conditions)
                 offset = (page - 1) * size
@@ -834,10 +887,15 @@ async def get_audit_logs(
         except Exception as exc:
             logger.warning("Erro ao consultar audit_logs de %s: %s", svc, exc)
 
-    all_logs.sort(key=lambda x: x.get("timestamp", ""), reverse=True)
+    all_logs.sort(key=lambda x: str(x.get("timestamp", "")), reverse=True)
     return {"items": all_logs[:size], "total": len(all_logs), "page": page, "size": size}
 
 
+@audit_cross_router.get(
+    "/summary",
+    summary="Resumo de auditoria (cross-service)",
+    dependencies=[Depends(require_roles("ADMIN"))],
+)
 @audit_cross_router.get(
     "/cross/summary",
     summary="Resumo de auditoria (cross-service)",
@@ -851,6 +909,15 @@ async def get_audit_summary(
         from_date = (datetime.now(timezone.utc) - timedelta(days=30)).strftime("%Y-%m-%d")
     if not to_date:
         to_date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+
+    try:
+        dt_from = datetime.strptime(from_date[:10], "%Y-%m-%d").date()
+    except Exception:
+        dt_from = (datetime.now(timezone.utc) - timedelta(days=30)).date()
+    try:
+        dt_to = datetime.strptime(to_date[:10], "%Y-%m-%d").date()
+    except Exception:
+        dt_to = datetime.now(timezone.utc).date()
 
     summary = {
         "period": {"from": from_date, "to": to_date},
@@ -867,9 +934,9 @@ async def get_audit_summary(
                 rows = await conn.fetch(
                     "SELECT operation, table_name, COUNT(*) AS cnt "
                     "FROM audit_logs "
-                    "WHERE timestamp::date BETWEEN $1::date AND $2::date "
+                    "WHERE timestamp::date >= $1 AND timestamp::date <= $2 "
                     "GROUP BY operation, table_name",
-                    from_date, to_date,
+                    dt_from, dt_to,
                 )
                 for row in rows:
                     cnt = row["cnt"]
@@ -889,12 +956,17 @@ async def get_audit_summary(
 
 
 @audit_cross_router.get(
+    "/suspicious",
+    summary="Atividades suspeitas (cross-service)",
+    dependencies=[Depends(require_roles("ADMIN"))],
+)
+@audit_cross_router.get(
     "/cross/suspicious",
     summary="Atividades suspeitas (cross-service)",
     dependencies=[Depends(require_roles("ADMIN"))],
 )
 async def get_suspicious():
-    cutoff = (datetime.now(timezone.utc) - timedelta(days=7)).isoformat()
+    cutoff_dt = datetime.now(timezone.utc) - timedelta(days=7)
     alerts: list[dict] = []
 
     for svc, url in _get_db_urls().items():
@@ -908,7 +980,7 @@ async def get_suspicious():
                     "WHERE operation = 'DELETE' AND timestamp > $1 "
                     "GROUP BY user_id, user_email, date_trunc('hour', timestamp) "
                     "HAVING COUNT(*) > 10",
-                    cutoff,
+                    cutoff_dt,
                 )
                 for row in rows:
                     alerts.append({
@@ -926,7 +998,7 @@ async def get_suspicious():
                     "FROM audit_logs "
                     "WHERE operation = 'AUTH_LOGIN_FAILED' AND timestamp > $1 "
                     "GROUP BY user_email HAVING COUNT(*) > 5",
-                    cutoff,
+                    cutoff_dt,
                 )
                 for row in failed:
                     alerts.append({
@@ -987,7 +1059,7 @@ def _make_stat_handler(session_factory, stat_type: str, id_field: str):
                         DailyStats.entity_id == None,
                     )
                 )
-                row = existing.scalar_one_or_none()
+                row = existing.scalars().first()
                 if row:
                     row.value += 1
                 else:
@@ -1016,7 +1088,7 @@ def _make_doctor_stat_handler(session_factory):
                         DailyStats.entity_id == doctor_id,
                     )
                 )
-                row = existing.scalar_one_or_none()
+                row = existing.scalars().first()
                 if row:
                     row.value += 1
                 else:
@@ -1068,7 +1140,7 @@ async def list_backups():
             "key": obj["Key"],
             "size_mb": round(obj["Size"] / 1_048_576, 2),
             "created_at": obj["LastModified"].isoformat(),
-            "download_url": url,
+            "download_url": _format_public_url(url),
         })
     return {"items": items, "total": len(items)}
 

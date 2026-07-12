@@ -17,5 +17,8 @@ RUN pip install --default-timeout=120 --no-cache-dir -r requirements.txt
 COPY shared /app/shared
 COPY clinical-service .
 
+RUN useradd -m -u 1001 appuser && chown -R appuser:appuser /app
+USER appuser
+
 CMD ["celery", "-A", "app.workers.celery_app.celery_app", "worker", \
      "--loglevel=info", "--concurrency=2", "-Q", "celery"]

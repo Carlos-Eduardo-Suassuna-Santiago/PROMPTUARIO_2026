@@ -55,8 +55,6 @@ logger = logging.getLogger(__name__)
 # Maps path prefix → (service_url, requires_auth)
 
 ROUTE_TABLE: list[tuple[str, str, bool]] = [
-    # Observability — public (gateway /metrics served locally via setup_observability)
-    ("/metrics",             settings.IAM_SERVICE_URL,       False),
     # Auth routes — public
     ("/api/v1/auth/login",   settings.IAM_SERVICE_URL,       False),
     ("/api/v1/auth/refresh", settings.IAM_SERVICE_URL,       False),

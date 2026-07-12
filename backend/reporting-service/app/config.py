@@ -16,6 +16,7 @@ class Settings(BaseSettings):
     JWT_ALGORITHM: str = "HS256"
 
     S3_ENDPOINT: str = "http://localhost:9000"
+    S3_PUBLIC_ENDPOINT: str = "http://localhost:9000"
     S3_ACCESS_KEY: str = "promptuario"
     S3_SECRET_KEY: str = "promptuario_pass"
     S3_BUCKET_REPORTS: str = "reports"

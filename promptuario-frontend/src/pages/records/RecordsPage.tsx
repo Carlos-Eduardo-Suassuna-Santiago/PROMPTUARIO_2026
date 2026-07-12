@@ -337,7 +337,7 @@ function RecordDetailView({ recordId }: { recordId: string }) {
                     onClick={async () => {
                       try {
                         const blob = await recordsApi.downloadPrescription(record.id, rx.id)
-                        const url = window.URL.createObjectURL(blob as Blob)
+                        const url = window.URL.createObjectURL(blob as unknown as Blob)
                         const a = document.createElement('a')
                         a.href = url
                         a.download = `prescricao-${rx.id.slice(0, 8)}.pdf`

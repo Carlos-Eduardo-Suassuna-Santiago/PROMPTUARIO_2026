@@ -42,6 +42,7 @@ celery_app.conf.update(
     task_track_started=True,
     task_acks_late=True,
     worker_prefetch_multiplier=1,
+    broker_connection_retry_on_startup=True,
 )
 
 
@@ -71,14 +72,15 @@ def _get_sync_engine():
 
 
 def _write_audit_log(session, event_type: str, entity_type: str, entity_id: str | None,
-                     description: str, performed_by: str, metadata: dict | None = None,
-                     ip_address: str | None = None) -> None:
+                     description: str, performed_by: str, event_metadata: dict | None = None,
+                     metadata: dict | None = None, ip_address: str | None = None) -> None:
+    meta = event_metadata or metadata or {}
     session.execute(
         sa_text("""
             INSERT INTO report_audit_logs (id, event_type, entity_type, entity_id,
-                description, performed_by, metadata, ip_address, created_at)
+                description, performed_by, event_metadata, ip_address, created_at)
             VALUES (:id, :event_type, :entity_type, :entity_id,
-                :description, :performed_by, :metadata, :ip_address, :now)
+                :description, :performed_by, :event_metadata, :ip_address, :now)
         """),
         {
             "id": str(uuid.uuid4()),
@@ -87,7 +89,7 @@ def _write_audit_log(session, event_type: str, entity_type: str, entity_id: str 
             "entity_id": entity_id,
             "description": description,
             "performed_by": performed_by,
-            "metadata": json.dumps(metadata or {}),
+            "event_metadata": json.dumps(meta),
             "ip_address": ip_address,
             "now": datetime.now(timezone.utc).isoformat(),
         },
@@ -188,6 +190,35 @@ def _generate_data(session, report_type: str, params: dict) -> list[dict]:
         ).fetchall()
         return [{"date": str(r.stat_date), "prescriptions": r.prescriptions} for r in rows]
 
+    elif report_type == "FULL_SYSTEM":
+        rows = session.execute(
+            sa_text("""
+                SELECT 
+                    stat_date as date,
+                    COALESCE(SUM(CASE WHEN stat_type = 'CONSULTATIONS' THEN value ELSE 0 END), 0) as consultations,
+                    COALESCE(SUM(CASE WHEN stat_type = 'NEW_PATIENTS' THEN value ELSE 0 END), 0) as new_patients,
+                    COALESCE(SUM(CASE WHEN stat_type = 'CANCELLATIONS' THEN value ELSE 0 END), 0) as cancellations,
+                    COALESCE(SUM(CASE WHEN stat_type = 'PRESCRIPTIONS' THEN value ELSE 0 END), 0) as prescriptions,
+                    COALESCE(SUM(CASE WHEN stat_type = 'DOCTOR_CONSULTATIONS' THEN value ELSE 0 END), 0) as doctor_consultations
+                FROM daily_stats
+                WHERE stat_date BETWEEN :from_date AND :to_date
+                GROUP BY stat_date
+                ORDER BY stat_date DESC
+            """),
+            {"from_date": from_date, "to_date": to_date},
+        ).fetchall()
+        return [
+            {
+                "Data": str(r.date),
+                "Consultas": r.consultations,
+                "Novos Pacientes": r.new_patients,
+                "Cancelamentos": r.cancellations,
+                "Prescrições": r.prescriptions,
+                "Consultas por Médico": r.doctor_consultations,
+            }
+            for r in rows
+        ]
+
     return []
 
 
@@ -218,6 +249,15 @@ def _upload_report(job_id: str, data: list, output_format: str, report_type: str
             Key=key,
             Body=content,
             ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
+
+    elif output_format == "JSON":
+        content = json.dumps(data, ensure_ascii=False, indent=2).encode("utf-8")
+        s3.put_object(
+            Bucket=settings.S3_BUCKET_REPORTS,
+            Key=key,
+            Body=content,
+            ContentType="application/json",
         )
 
     return key
@@ -278,13 +318,23 @@ def _data_to_html(data: list, report_type: str) -> str:
         for row in data
     )
     header_row = "".join(f"<th>{h}</th>" for h in headers)
+    title_map = {
+        "CONSULTATIONS": "Consultas Diárias",
+        "PATIENTS": "Novos Pacientes",
+        "DOCTORS": "Consultas por Médico",
+        "PRESCRIPTIONS": "Prescrições",
+        "FULL_SYSTEM": "Relatório Completo do Sistema",
+        "CUSTOM": "Personalizado",
+    }
+    title = title_map.get(report_type, report_type)
     return f"""
     <html><head><meta charset='utf-8'>
-    <style>body{{font-family:Arial;}} table{{border-collapse:collapse;width:100%;}}
-    th,td{{border:1px solid #ddd;padding:8px;}} th{{background:#4A90D9;color:#fff;}}</style>
+    <style>body{{font-family:sans-serif;}} table{{border-collapse:collapse;width:100%;}}
+    th,td{{border:1px solid #ddd;padding:8px;}} th{{background:#4A90D9;color:#fff;}}
+    tr {{ page-break-inside: avoid; }}</style>
     </head><body>
-    <h2>Relatório: {report_type}</h2>
-    <table><thead><tr>{header_row}</tr></thead><tbody>{rows}</tbody></table>
+    <h2>Relatório: {title}</h2>
+    <table><tr>{header_row}</tr>{rows}</table>
     </body></html>
     """
 
@@ -298,7 +348,7 @@ def dispatch_webhooks(session, job_id: str, event_type: str, payload: dict) -> N
         sa_text("""
             SELECT id, url, secret, max_retries, retry_interval_seconds
             FROM webhook_configs
-            WHERE active = true AND events @> :event_arr::jsonb
+            WHERE active = true AND CAST(events AS jsonb) @> CAST(:event_arr AS jsonb)
         """),
         {"event_arr": json.dumps([event_type])},
     ).fetchall()
@@ -405,7 +455,7 @@ def dispatch_webhooks(session, job_id: str, event_type: str, payload: dict) -> N
             description=f"Webhook {'delivered' if success else 'failed'} to {wh_url} "
                         f"for job {job_id} (event={event_type})",
             performed_by="system",
-            metadata={"job_id": job_id, "event_type": event_type, "success": success,
+            event_metadata={"job_id": job_id, "event_type": event_type, "success": success,
                       "status_code": status_code, "attempt": attempt},
         )
 
@@ -447,7 +497,7 @@ def generate_report(self, job_id: str) -> dict:
             s3_key = None
             row_count = len(data) if isinstance(data, list) else 1
 
-            if output_format in ("CSV", "PDF", "XLSX"):
+            if output_format in ("CSV", "PDF", "XLSX", "JSON"):
                 s3_key = _upload_report(job_id, data, output_format, report_type)
 
             session.execute(
@@ -471,7 +521,7 @@ def generate_report(self, job_id: str) -> dict:
             _write_audit_log(session, "REPORT_COMPLETED", "report_job", job_id,
                              f"Report completed: {report_type} ({row_count} rows, {output_format})",
                              "system",
-                             metadata={"row_count": row_count, "output_format": output_format,
+                             event_metadata={"row_count": row_count, "output_format": output_format,
                                        "s3_key": s3_key})
 
             # ── Dispatch webhooks ──
@@ -499,6 +549,7 @@ def generate_report(self, job_id: str) -> dict:
 
         except Exception as e:
             logger.error("Report generation failed for %s: %s", job_id, e)
+            session.rollback()
             session.execute(
                 sa_text("UPDATE report_jobs SET status='FAILED', error_message=:err WHERE id=:id"),
                 {"err": str(e), "id": job_id},
@@ -506,7 +557,7 @@ def generate_report(self, job_id: str) -> dict:
             session.commit()
             _write_audit_log(session, "REPORT_FAILED", "report_job", job_id,
                              f"Report failed: {str(e)[:200]}", "system",
-                             metadata={"error": str(e)})
+                             event_metadata={"error": str(e)})
 
             # Dispatch failure webhook
             payload = {
@@ -603,6 +654,7 @@ def generate_multi_sheet_report(self, job_id: str, sheets_def: list[dict]) -> di
 
         except Exception as e:
             logger.error("Multi-sheet report failed: %s", e)
+            session.rollback()
             session.execute(
                 sa_text("UPDATE report_jobs SET status='FAILED', error_message=:err WHERE id=:id"),
                 {"err": str(e), "id": job_id},
@@ -666,7 +718,7 @@ def run_scheduled_report(schedule_id: str) -> None:
 
         _write_audit_log(session, "SCHEDULE_TRIGGERED", "report_schedule", schedule_id,
                          f"Scheduled report triggered: {sched.name}", "system",
-                         metadata={"job_id": job_id, "report_type": sched.report_type})
+                         event_metadata={"job_id": job_id, "report_type": sched.report_type})
 
     # Dispatch the actual generation task
     celery_app.send_task("reporting.generate_report", args=[job_id])

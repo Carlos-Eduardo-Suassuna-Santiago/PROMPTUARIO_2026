@@ -307,6 +307,7 @@ function LogsTab() {
                   <Th>Tabela</Th>
                   <Th>Registro</Th>
                   <Th>Usuário</Th>
+                  <Th>IP / Máquina</Th>
                 </tr>
               </thead>
               <tbody>
@@ -343,6 +344,11 @@ function LogsTab() {
                     <Td>
                       <span className="text-xs text-slate-400">
                         {log.user_email || log.user_id?.substring(0, 8) || '—'}
+                      </span>
+                    </Td>
+                    <Td>
+                      <span className="text-xs text-slate-400 font-mono">
+                        {log.ip_address || '—'}
                       </span>
                     </Td>
                   </tr>

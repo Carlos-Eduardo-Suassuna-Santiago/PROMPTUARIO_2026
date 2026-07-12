@@ -6,11 +6,14 @@ from __future__ import annotations
 import uuid
 from datetime import datetime, timezone
 from typing import Any
+from contextvars import ContextVar
 
 from sqlalchemy import DateTime, JSON, String, Index
 from sqlalchemy.orm import Mapped, mapped_column
 
 from shared.models.database import Base
+
+audit_context_var: ContextVar[dict[str, Any]] = ContextVar("audit_context_var", default={})
 
 
 def _now() -> datetime:
@@ -94,6 +97,18 @@ async def log_operation(
     import logging
     _logger = logging.getLogger(__name__)
     try:
+        ctx = audit_context_var.get()
+        if user_id is None:
+            user_id = ctx.get("user_id")
+        if user_role is None:
+            user_role = ctx.get("user_role")
+        if user_email is None:
+            user_email = ctx.get("user_email")
+        if ip_address is None:
+            ip_address = ctx.get("ip_address")
+        if request_id is None:
+            request_id = ctx.get("request_id")
+
         entry = AuditLog(
             service_name=service,
             table_name=table,

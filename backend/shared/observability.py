@@ -143,9 +143,33 @@ def setup_observability(app: FastAPI, service_name: str, log_level: str = "INFO"
         @app.middleware("http")
         async def request_id_middleware(request, call_next):
             request_id = request.headers.get("X-Request-Id", str(_uuid.uuid4()))
-            response = await call_next(request)
-            response.headers["X-Request-Id"] = request_id
-            return response
+            forwarded = request.headers.get("X-Forwarded-For")
+            if forwarded:
+                client_ip = forwarded.split(",")[0].strip()
+            else:
+                client_ip = request.client.host if request.client else None
+
+            token = None
+            try:
+                from shared.audit import audit_context_var
+                curr = dict(audit_context_var.get())
+                curr["request_id"] = request_id
+                if client_ip:
+                    curr["ip_address"] = client_ip
+                token = audit_context_var.set(curr)
+            except Exception:
+                pass
+
+            try:
+                response = await call_next(request)
+                response.headers["X-Request-Id"] = request_id
+                return response
+            finally:
+                if token:
+                    try:
+                        audit_context_var.reset(token)
+                    except Exception:
+                        pass
 
     except Exception as e:
         logger.error("Observability setup failed (service continues): %s", e)

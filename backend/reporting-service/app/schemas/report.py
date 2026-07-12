@@ -8,7 +8,7 @@ from pydantic import BaseModel, Field, field_validator
 
 class ReportExportRequest(BaseModel):
     """Request to generate an export (existing endpoint, extended with XLSX)."""
-    report_type: Literal["CONSULTATIONS", "PATIENTS", "DOCTORS", "PRESCRIPTIONS", "CUSTOM"]
+    report_type: Literal["CONSULTATIONS", "PATIENTS", "DOCTORS", "PRESCRIPTIONS", "CUSTOM", "FULL_SYSTEM"]
     output_format: Literal["JSON", "CSV", "PDF", "XLSX"] = "XLSX"
     parameters: dict = Field(default_factory=dict)
 
@@ -59,7 +59,7 @@ class MultiSheetExportRequest(BaseModel):
 
 class SheetDefinition(BaseModel):
     sheet_name: str = Field(..., min_length=1, max_length=31, description="Excel sheet name (max 31 chars)")
-    report_type: Literal["CONSULTATIONS", "PATIENTS", "DOCTORS", "PRESCRIPTIONS", "CUSTOM"]
+    report_type: Literal["CONSULTATIONS", "PATIENTS", "DOCTORS", "PRESCRIPTIONS", "CUSTOM", "FULL_SYSTEM"]
     parameters: dict = Field(default_factory=dict)
     sql_query_name: Optional[str] = Field(None, max_length=64)
 

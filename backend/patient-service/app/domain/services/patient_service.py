@@ -617,6 +617,10 @@ class DocumentService:
                 },
                 ExpiresIn=settings.S3_PRESIGNED_URL_EXPIRY,
             )
+            if "http://minio:9000" in url:
+                url = url.replace("http://minio:9000", settings.S3_PUBLIC_ENDPOINT)
+            elif settings.S3_ENDPOINT in url and hasattr(settings, "S3_PUBLIC_ENDPOINT") and settings.S3_PUBLIC_ENDPOINT:
+                url = url.replace(settings.S3_ENDPOINT, settings.S3_PUBLIC_ENDPOINT)
             return url
         except ClientError as e:
             logger.error("S3 pre-signed URL generation failed: %s", e)

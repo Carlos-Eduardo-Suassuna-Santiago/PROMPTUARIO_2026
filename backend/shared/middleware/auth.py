@@ -41,6 +41,15 @@ def make_auth_dependency(secret: str, algorithm: str):
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Token inválido: faltam campos obrigatórios",
             )
+        try:
+            from shared.audit import audit_context_var
+            curr = dict(audit_context_var.get())
+            curr["user_id"] = payload.sub
+            curr["user_role"] = payload.role
+            curr["user_email"] = payload.email
+            audit_context_var.set(curr)
+        except Exception:
+            pass
         return payload
 
     def require_roles(*roles: str):

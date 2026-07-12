@@ -4,7 +4,7 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { Calendar, Plus, X, CheckCircle, Clock, Search } from 'lucide-react'
 import {
-  useAppointments, useCreateAppointment, useCancelAppointment,
+  useAppointments, useCreateAppointment, useCancelAppointment, useConfirmAppointment,
   usePatients, useDoctors,
 } from '@/hooks'
 import { PageHeader } from '@/components/layout/AppShell'
@@ -335,7 +335,7 @@ export function AppointmentsPage() {
                   <Th>Tipo</Th>
                   <Th>Especialidade</Th>
                   <Th>Status</Th>
-                  <Th />
+                  <Th>Ações</Th>
                 </tr>
               </thead>
               <tbody>
