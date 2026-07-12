@@ -7,6 +7,11 @@ COPY package*.json ./
 RUN npm ci --frozen-lockfile
 
 COPY . .
+
+# Accept API URL at build time for production
+ARG VITE_API_BASE_URL
+ENV VITE_API_BASE_URL=$VITE_API_BASE_URL
+
 RUN npm run build
 
 

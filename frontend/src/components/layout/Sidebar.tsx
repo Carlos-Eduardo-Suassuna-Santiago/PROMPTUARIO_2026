@@ -54,10 +54,10 @@ const NAV_ITEMS: NavItem[] = [
     roles: ['ADMIN', 'DOCTOR'],
   },
   {
-    label: 'Meu Perfil',
-    href: '/profile',
-    icon: <UserCircle className="w-4 h-4" />,
-    roles: ['ADMIN', 'DOCTOR', 'ATTENDANT', 'PATIENT'],
+    label: 'Minha Saúde',
+    href: '/my-health',
+    icon: <Activity className="w-4 h-4" />,
+    roles: ['PATIENT'],
   },
   {
     label: 'Usuários',

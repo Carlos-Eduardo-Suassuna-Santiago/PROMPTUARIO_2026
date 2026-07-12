@@ -1,0 +1,13 @@
+services:
+  frontend:
+    # Use the image built by GitHub Actions
+    image: ghcr.io/${GITHUB_REPOSITORY_OWNER}/frontend:latest
+    container_name: frontend
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
