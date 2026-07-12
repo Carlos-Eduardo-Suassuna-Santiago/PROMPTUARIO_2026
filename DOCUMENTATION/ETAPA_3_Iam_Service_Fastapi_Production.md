@@ -13,75 +13,51 @@ Implementar o IAM Service responsável por:
 * Protected Routes
 * Session Security
 * Role Validation
+* OAuth2 Google Integration
 
 Stack:
 
 * FastAPI
-* PostgreSQL
-* SQLAlchemy
+* PostgreSQL (async via SQLAlchemy + asyncpg)
+* SQLAlchemy (async)
 * Alembic
 * Pydantic
-* JWT
+* JWT (python-jose)
+* Redis (blacklist + rate limiting)
+* RabbitMQ (event publishing)
 * Docker
 
 ---
 
-# 2. ESTRUTURA DO PROJETO
+# 2. ESTRUTURA DO PROJETO (REAL)
 
 ```text
 iam-service/
 ├── app/
-│   ├── api/
-│   │   ├── deps.py
-│   │   ├── router.py
-│   │   └── v1/
-│   │       ├── auth_routes.py
-│   │       ├── user_routes.py
-│   │       └── admin_routes.py
+│   ├── __init__.py
+│   ├── main.py                    # FastAPI app, startup, seed admin
+│   ├── config.py                  # Settings via pydantic-settings
 │   │
-│   ├── core/
-│   │   ├── config.py
-│   │   ├── security.py
-│   │   ├── database.py
-│   │   └── logging.py
+│   ├── api/
+│   │   ├── routers.py             # auth_router, users_router
+│   │   └── oauth_router.py        # Google OAuth2 routes
 │   │
 │   ├── domain/
 │   │   ├── models/
-│   │   │   ├── user.py
-│   │   │   ├── role.py
-│   │   │   └── refresh_token.py
+│   │   │   ├── user.py            # User model (SQLAlchemy)
+│   │   │   └── oauth_account.py   # OAuthAccount model
 │   │   │
-│   │   └── enums/
-│   │       └── roles.py
+│   │   └── services/
+│   │       ├── auth_service.py    # Login, refresh, logout
+│   │       ├── user_service.py    # CRUD de usuários
+│   │       └── oauth_service.py   # Google OAuth2 flow
 │   │
-│   ├── schemas/
-│   │   ├── auth_schema.py
-│   │   ├── user_schema.py
-│   │   └── token_schema.py
-│   │
-│   ├── repositories/
-│   │   ├── user_repository.py
-│   │   ├── role_repository.py
-│   │   └── refresh_repository.py
-│   │
-│   ├── services/
-│   │   ├── auth_service.py
-│   │   ├── user_service.py
-│   │   ├── token_service.py
-│   │   └── rbac_service.py
-│   │
-│   ├── middleware/
-│   │   ├── auth_middleware.py
-│   │   └── role_middleware.py
-│   │
-│   ├── messaging/
-│   │   ├── producer.py
-│   │   └── events.py
-│   │
-│   └── main.py
+│   └── infrastructure/
+│       └── repositories/
+│           ├── user_repository.py
+│           └── oauth_repository.py
 │
-├── alembic/
-├── alembic.ini
+├── tests/
 ├── requirements.txt
 ├── Dockerfile
 ├── .env
@@ -95,8 +71,8 @@ iam-service/
 ```txt
 fastapi
 uvicorn[standard]
-sqlalchemy
-psycopg2-binary
+sqlalchemy[asyncio]
+asyncpg
 alembic
 python-jose[cryptography]
 passlib[bcrypt]
@@ -106,33 +82,53 @@ python-dotenv
 email-validator
 httpx
 pika
+redis[hiredis]
+pydantic-extra-types
 ```
 
 ---
 
-# 4. CONFIGURAÇÃO
+# 4. CONFIGURAÇÃO (REAL)
 
-# app/core/config.py
+# app/config.py
 
 ```python
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    APP_NAME: str = "iam-service"
+    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
-    DATABASE_URL: str
+    # App
+    SERVICE_NAME: str = "iam-service"
+    LOG_LEVEL: str = "INFO"
+    DEBUG: bool = False
 
-    JWT_SECRET_KEY: str
+    # Database (async)
+    DATABASE_URL: str = "postgresql+asyncpg://iam:iam_pass@localhost:5432/iam_db"
+
+    # Redis
+    REDIS_URL: str = "redis://localhost:6379/0"
+
+    # RabbitMQ
+    RABBITMQ_URL: str = "amqp://promptuario:promptuario_pass@localhost:5672/"
+
+    # JWT
+    JWT_SECRET_KEY: str = "change-me-in-production"
     JWT_ALGORITHM: str = "HS256"
-
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
 
-    RABBITMQ_URL: str
+    # OAuth Google
+    GOOGLE_CLIENT_ID: str = ""
+    GOOGLE_CLIENT_SECRET: str = ""
+    OAUTH_REDIRECT_BASE_URL: str = "http://localhost:8000"
+    FRONTEND_CALLBACK_URL: str = "http://localhost:3000/auth/callback"
 
-    class Config:
-        env_file = ".env"
+    # First admin user (created on startup)
+    FIRST_ADMIN_EMAIL: str = "admin@promptuario.health"
+    FIRST_ADMIN_PASSWORD: str = "Admin@12345"
+    FIRST_ADMIN_NAME: str = "Administrador"
 
 
 settings = Settings()
@@ -140,193 +136,134 @@ settings = Settings()
 
 ---
 
-# 5. DATABASE CONFIG
+# 5. DATABASE (ASYNC - REAL)
 
-# app/core/database.py
+# shared/models/database.py
 
 ```python
-from sqlalchemy import create_engine
-from sqlalchemy.orm import declarative_base
-from sqlalchemy.orm import sessionmaker
-
-from app.core.config import settings
-
-engine = create_engine(settings.DATABASE_URL)
-
-SessionLocal = sessionmaker(
-    autocommit=False,
-    autoflush=False,
-    bind=engine
+"""
+Async SQLAlchemy base — used by IAM, Patient, Clinical, Reporting services.
+"""
+from sqlalchemy.ext.asyncio import (
+    AsyncSession,
+    async_sessionmaker,
+    create_async_engine,
 )
+from sqlalchemy.orm import DeclarativeBase
 
-Base = declarative_base()
+
+class Base(DeclarativeBase):
+    pass
 
 
-def get_db():
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
+def build_engine(database_url: str):
+    return create_async_engine(
+        database_url,
+        echo=False,
+        pool_pre_ping=True,
+        pool_size=10,
+        max_overflow=20,
+    )
+
+
+def build_session_factory(engine) -> async_sessionmaker[AsyncSession]:
+    return async_sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
+
+
+async def get_session(session_factory):
+    async with session_factory() as session:
+        try:
+            yield session
+            await session.commit()
+        except Exception:
+            await session.rollback()
+            raise
+        finally:
+            await session.close()
 ```
 
 ---
 
-# 6. ROLE ENUM
-
-# app/domain/enums/roles.py
-
-```python
-from enum import Enum
-
-
-class UserRole(str, Enum):
-    ADMIN = "admin"
-    DOCTOR = "doctor"
-    PATIENT = "patient"
-    ATTENDANT = "attendant"
-```
-
----
-
-# 7. USER MODEL
+# 6. USER MODEL (REAL)
 
 # app/domain/models/user.py
 
 ```python
 import uuid
 
-from sqlalchemy import Column
-from sqlalchemy import String
-from sqlalchemy import Boolean
+from sqlalchemy import Column, String, Boolean, DateTime
 from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.sql import func
 
-from app.core.database import Base
+from shared.models.database import Base
 
 
 class User(Base):
     __tablename__ = "users"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-
-    full_name = Column(String, nullable=False)
-
-    email = Column(String, unique=True, nullable=False)
-
-    password_hash = Column(String, nullable=False)
-
-    role = Column(String, nullable=False)
-
+    email = Column(String(255), unique=True, nullable=False, index=True)
+    hashed_password = Column(String(128), nullable=False)
+    full_name = Column(String(255), nullable=False)
+    role = Column(String(50), nullable=False, default="ATTENDANT")
     is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    deactivated_at = Column(DateTime(timezone=True), nullable=True)
+    deactivation_reason = Column(String(255), nullable=True)
 ```
 
 ---
 
-# 8. REFRESH TOKEN MODEL
+# 7. USER REPOSITORY (REAL - Async)
 
-# app/domain/models/refresh_token.py
+# app/infrastructure/repositories/user_repository.py
 
 ```python
-import uuid
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from sqlalchemy import Column
-from sqlalchemy import String
-from sqlalchemy import DateTime
-from sqlalchemy import ForeignKey
-
-from sqlalchemy.dialects.postgresql import UUID
-
-from app.core.database import Base
+from app.domain.models.user import User
 
 
-class RefreshToken(Base):
-    __tablename__ = "refresh_tokens"
+class UserRepository:
+    def __init__(self, session: AsyncSession):
+        self.session = session
 
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    async def get_by_email(self, email: str) -> User | None:
+        result = await self.session.execute(
+            select(User).where(User.email == email)
+        )
+        return result.scalar_one_or_none()
 
-    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"))
+    async def get_by_id(self, user_id: str) -> User | None:
+        result = await self.session.execute(
+            select(User).where(User.id == user_id)
+        )
+        return result.scalar_one_or_none()
 
-    token = Column(String, nullable=False)
+    async def create(self, user: User) -> User:
+        self.session.add(user)
+        await self.session.flush()
+        return user
 
-    expires_at = Column(DateTime, nullable=False)
+    async def update(self, user: User) -> User:
+        self.session.add(user)
+        await self.session.flush()
+        return user
 ```
 
 ---
 
-# 9. PYDANTIC SCHEMAS
+# 8. SECURITY UTILITIES (REAL)
 
-# app/schemas/user_schema.py
-
-```python
-from uuid import UUID
-
-from pydantic import BaseModel
-from pydantic import EmailStr
-
-
-class UserCreate(BaseModel):
-    full_name: str
-    email: EmailStr
-    password: str
-    role: str
-
-
-class UserResponse(BaseModel):
-    id: UUID
-    full_name: str
-    email: EmailStr
-    role: str
-
-    class Config:
-        from_attributes = True
-```
-
----
-
-# app/schemas/auth_schema.py
+# shared/utils/security.py
 
 ```python
-from pydantic import BaseModel
-from pydantic import EmailStr
-
-
-class LoginRequest(BaseModel):
-    email: EmailStr
-    password: str
-
-
-class RefreshRequest(BaseModel):
-    refresh_token: str
-```
-
----
-
-# app/schemas/token_schema.py
-
-```python
-from pydantic import BaseModel
-
-
-class TokenResponse(BaseModel):
-    access_token: str
-    refresh_token: str
-    token_type: str = "bearer"
-```
-
----
-
-# 10. SECURITY UTILITIES
-
-# app/core/security.py
-
-```python
-from datetime import datetime
-from datetime import timedelta
+from datetime import datetime, timedelta
 
 from jose import jwt
 from passlib.context import CryptContext
-
-from app.core.config import settings
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
@@ -339,69 +276,94 @@ def verify_password(password: str, hashed: str) -> bool:
     return pwd_context.verify(password, hashed)
 
 
-def create_access_token(data: dict):
+def create_access_token(data: dict, secret: str, algorithm: str, expires_minutes: int):
     payload = data.copy()
-
-    expire = datetime.utcnow() + timedelta(
-        minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES
-    )
-
-    payload.update({"exp": expire})
-
-    return jwt.encode(
-        payload,
-        settings.JWT_SECRET_KEY,
-        algorithm=settings.JWT_ALGORITHM
-    )
+    expire = datetime.utcnow() + timedelta(minutes=expires_minutes)
+    payload.update({"exp": expire, "type": "access"})
+    return jwt.encode(payload, secret, algorithm=algorithm)
 
 
-def create_refresh_token(data: dict):
+def create_refresh_token(data: dict, secret: str, algorithm: str, expires_days: int):
     payload = data.copy()
-
-    expire = datetime.utcnow() + timedelta(
-        days=settings.REFRESH_TOKEN_EXPIRE_DAYS
-    )
-
-    payload.update({"exp": expire})
-
-    return jwt.encode(
-        payload,
-        settings.JWT_SECRET_KEY,
-        algorithm=settings.JWT_ALGORITHM
-    )
+    expire = datetime.utcnow() + timedelta(days=expires_days)
+    payload.update({"exp": expire, "type": "refresh"})
+    return jwt.encode(payload, secret, algorithm=algorithm)
 
 
-def decode_token(token: str):
-    return jwt.decode(
-        token,
-        settings.JWT_SECRET_KEY,
-        algorithms=[settings.JWT_ALGORITHM]
-    )
+def decode_token(token: str, secret: str, algorithm: str):
+    return jwt.decode(token, secret, algorithms=[algorithm])
 ```
 
 ---
 
-# 11. USER REPOSITORY
+# 9. MAIN APP (REAL)
 
-# app/repositories/user_repository.py
+# app/main.py
 
 ```python
-from sqlalchemy.orm import Session
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+import redis.asyncio as aioredis
 
-from app.domain.models.user import User
+from app.api.routers import auth_router, users_router
+from app.api.oauth_router import oauth_router
+from app.config import settings
+from shared.models.database import Base, build_engine, build_session_factory
+from shared.events.broker import EventPublisher
+from shared.observability import setup_observability
+
+app = FastAPI(title="PROMPTUARIO — IAM Service", version="1.0.0")
+
+app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True,
+                   allow_methods=["*"], allow_headers=["*"])
+
+setup_observability(app, settings.SERVICE_NAME, settings.LOG_LEVEL)
+
+app.include_router(auth_router, prefix="/api/v1")
+app.include_router(users_router, prefix="/api/v1")
+app.include_router(oauth_router, prefix="/api/v1")
 
 
-class UserRepository:
+@app.on_event("startup")
+async def startup():
+    engine = build_engine(settings.DATABASE_URL)
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+    app.state.session_factory = build_session_factory(engine)
+    app.state.redis = await aioredis.from_url(settings.REDIS_URL, decode_responses=True)
+    publisher = EventPublisher(settings.RABBITMQ_URL)
+    await publisher.connect()
+    app.state.publisher = publisher
+    await _seed_admin()
 
-    def __init__(self, db: Session):
-        self.db = db
 
-        def get_by_email(self, email: str):
-                return self.db.query(User).filter(User.email == email).first()
+@app.get("/healthz")
+async def health():
+    return {"status": "ok", "service": settings.SERVICE_NAME}
+```
 
 ---
 
-# Detalhes de implementação (extraído do ambiente)
+# 10. ENDPOINTS
+
+| Método | Endpoint | Descrição | Role |
+|--------|----------|-----------|------|
+| POST | /api/v1/auth/login | Autenticar usuário | Público |
+| POST | /api/v1/auth/refresh | Renovar access token | Público |
+| POST | /api/v1/auth/logout | Revogar tokens | Autenticado |
+| POST | /api/v1/auth/change-password | Alterar senha | Autenticado |
+| POST | /api/v1/auth/oauth/google | Login com Google OAuth2 | Público |
+| GET | /api/v1/users | Listar usuários | ADMIN |
+| GET | /api/v1/users/me | Dados do usuário logado | Autenticado |
+| GET | /api/v1/users/{id} | Obter usuário por ID | ADMIN |
+| POST | /api/v1/users | Criar usuário | ADMIN |
+| PUT | /api/v1/users/{id} | Atualizar usuário | ADMIN, SELF |
+| PUT | /api/v1/users/{id}/role | Atribuir role | ADMIN |
+| DELETE | /api/v1/users/{id} | Desativar usuário | ADMIN |
+
+---
+
+# Detalhes de implementação
 
 - **Base path:** /api/v1
 - **Health endpoint:** /healthz
@@ -412,8 +374,7 @@ class UserRepository:
     - `RABBITMQ_URL` (ex: amqp://promptuario:promptuario_pass@rabbitmq:5672/)
     - `JWT_SECRET_KEY`, `JWT_ALGORITHM`
     - `ACCESS_TOKEN_EXPIRE_MINUTES`, `REFRESH_TOKEN_EXPIRE_DAYS`
-
-Use esses valores como referência ao descrever exemplos de `docker-compose` e `.env` no ambiente de produção/local.
+    - `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` (opcional)
 
 ---
 
@@ -425,4 +386,3 @@ curl http://localhost:8001/docs
 ```
 
 Quando acessado via gateway, o mesmo serviço responde em `http://localhost:8000/api/v1/auth/*` e `http://localhost:8000/api/v1/users/*`.
-```
