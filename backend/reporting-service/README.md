@@ -56,7 +56,7 @@ Este microsserviço existe para transformar dados operacionais do sistema em rel
 - RabbitMQ disponível
 - Redis disponível (broker do Celery)
 - MinIO disponível (armazenamento de relatórios)
-- Python 3.11+
+- Python 3.12+
 
 ## Início rápido
 
@@ -76,7 +76,7 @@ celery -A app.workers.celery_tasks worker --loglevel=info
 
 ```bash
 cd backend
-docker-compose up --build reporting-service
+docker compose up --build reporting-service
 ```
 
 ## Endpoints principais
