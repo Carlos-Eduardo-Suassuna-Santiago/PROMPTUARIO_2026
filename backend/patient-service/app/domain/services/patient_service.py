@@ -386,9 +386,6 @@ class MedicationService:
         if not med:
             raise HTTPException(status_code=404, detail="Medicamento não encontrado")
 
-        # Snapshot current state before updating
-        old_version = med.version
-
         if data.dosage is not None:
             med.dosage = data.dosage
         if data.frequency is not None:
