@@ -31,20 +31,20 @@ A solução adota uma arquitetura distribuída orientada a serviços, com separa
 | Persistência | Banco dedicado por serviço |
 | Mensageria | RabbitMQ para eventos assíncronos |
 | Processamento | Celery e workers para tarefas demoradas |
-| Observabilidade | Prometheus, Grafana, Loki, Tempo e Alertmanager |
+| Observabilidade | Prometheus, Grafana, Loki, Jaeger e Alertmanager |
 
 ---
 
 ## 3. Mapa de Serviços
 
-| Serviço | Porta | Responsabilidade | Banco |
-|--------|-------|------------------|-------|
-| IAM | 8001 | Autenticação, usuários, roles e blacklist JWT | PostgreSQL |
-| Patient | 8002 | Pacientes, dados demográficos e histórico básico | PostgreSQL |
-| Clinical | 8003 | Agendamentos, prontuários, prescrições e auditoria | PostgreSQL |
-| AI | 8004 | Análises clínicas assíncronas e integrações de IA | MongoDB |
-| Reporting | 8005 | Relatórios, projeções e exportações | PostgreSQL |
-| Gateway | 8000 | Entrada única, auth, proxy e agregação de health | Stateless |
+| Serviço | Porta Host | Porta Container | Responsabilidade | Banco |
+|---------|-----------|----------------|------------------|-------|
+| Gateway | 8000 | 8000 | Entrada única, auth, proxy, health | Stateless |
+| IAM | 8001 | 8000 | Autenticação, usuários, roles, OAuth2 | PostgreSQL |
+| Patient | 8002 | 8000 | Pacientes, dados demográficos, histórico | PostgreSQL |
+| Clinical | 8003 | 8000 | Agendamentos, prontuários, prescrições | PostgreSQL |
+| AI | 8004 | 8000 | Análises clínicas assíncronas (IA) | MongoDB |
+| Reporting | 8005 | 8000 | Relatórios, projeções, exportações | PostgreSQL |
 
 ---
 
@@ -114,19 +114,19 @@ flowchart LR
 
 | Componente | Função |
 |------------|--------|
-| PostgreSQL 15 | Persistência relacional por serviço |
+| PostgreSQL 15 | Persistência relacional por serviço (4 bancos) |
 | MongoDB 7 | Persistência documental do AI Service |
-| Redis 7 | Cache, blacklist JWT, rate limiting e broker auxiliar |
+| Redis 7 | Cache, blacklist JWT, rate limiting, Celery broker |
 | RabbitMQ 3.13 | Mensageria assíncrona entre serviços |
-| MinIO | Armazenamento compatível com S3 |
+| MinIO | Armazenamento compatível com S3 (prescrições, relatórios, backups) |
 | Prometheus | Coleta de métricas |
 | Grafana | Dashboards e visualização |
 | Loki | Centralização de logs |
-| Tempo | Tracing distribuído |
+| Jaeger + OpenTelemetry | Tracing distribuído |
 | Alertmanager | Alertas operacionais |
 
 ---
 
-## 9. Conclusão
+## 8. Conclusão
 
 A arquitetura combina serviços independentes, orquestração por container, comunicação assíncrona e observabilidade distribuída. O resultado é um desenho escalável, com menor acoplamento entre domínios e melhor capacidade de evolução por serviço.
