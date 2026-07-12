@@ -48,7 +48,7 @@ Este microsserviço existe para ajudar profissionais de saúde a trabalhar com m
 
 ## Pré-requisitos
 
-- Python 3.11+
+- Python 3.12+
 - Redis disponível
 - MongoDB disponível
 - RabbitMQ disponível
@@ -67,7 +67,7 @@ uvicorn app.main:app --reload --port 8004
 
 ```bash
 cd backend
-docker-compose up --build ai-service
+docker compose up --build ai-service
 ```
 
 ## Endpoints principais
