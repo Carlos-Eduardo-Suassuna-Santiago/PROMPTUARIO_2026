@@ -52,7 +52,7 @@ Este microsserviço existe para transformar o processo clínico em dados estrutu
 - PostgreSQL disponível
 - RabbitMQ disponível
 - MinIO disponível (para upload de prescrições)
-- Python 3.11+
+- Python 3.12+
 
 ## Início rápido
 
@@ -68,7 +68,7 @@ uvicorn app.main:app --reload --port 8003
 
 ```bash
 cd backend
-docker-compose up --build clinical-service
+docker compose up --build clinical-service
 ```
 
 ## Endpoints principais
