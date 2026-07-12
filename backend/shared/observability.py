@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 import os
 import sys
+import threading
 import uuid as _uuid
 from typing import Any
 
@@ -18,6 +19,22 @@ import time as _time
 from pythonjsonlogger import jsonlogger
 
 logger = logging.getLogger(__name__)
+
+_context_storage = threading.local()
+
+
+def set_request_context(**values: str | None) -> None:
+    current = getattr(_context_storage, "values", {})
+    current.update({k: v for k, v in values.items() if v is not None})
+    _context_storage.values = current
+
+
+def get_request_context() -> dict[str, str]:
+    return getattr(_context_storage, "values", {}).copy()
+
+
+def clear_request_context() -> None:
+    _context_storage.values = {}
 
 
 def register_resilience_metrics(app: FastAPI, service_name: str) -> dict[str, Any]:
@@ -130,6 +147,42 @@ def setup_observability(app: FastAPI, service_name: str, log_level: str = "INFO"
         )
         service_start_time.labels(service=service_name).set(_time.time())
 
+        # ─── Audit-specific metrics ─────────────────────────────────
+        audit_events_total = Counter(
+            "audit_events_total",
+            "Total de eventos de auditoria emitidos",
+            ["service", "operation"],
+        )
+        audit_events_failed_total = Counter(
+            "audit_events_failed_total",
+            "Total de falhas ao registrar auditoria",
+            ["service"],
+        )
+
+        # ─── Unified request context middleware ─────────────────────
+        @app.middleware("http")
+        async def request_context_middleware(request, call_next):
+            request_id = request.headers.get("X-Request-Id") or request.headers.get("x-request-id") or str(_uuid.uuid4())
+            correlation_id = request.headers.get("X-Correlation-Id") or request.headers.get("x-correlation-id") or request_id
+            ip_address = request.client.host if request.client else "unknown"
+            user_id = request.headers.get("X-User-Id") or request.headers.get("x-user-id")
+            user_email = request.headers.get("X-User-Email") or request.headers.get("x-user-email")
+            set_request_context(
+                request_id=request_id,
+                correlation_id=correlation_id,
+                ip_address=ip_address,
+                user_id=user_id,
+                user_email=user_email,
+            )
+            request.state.request_id = request_id
+            request.state.correlation_id = correlation_id
+            request.state.ip_address = ip_address
+            response = await call_next(request)
+            response.headers["X-Request-Id"] = request_id
+            response.headers["X-Correlation-Id"] = correlation_id
+            clear_request_context()
+            return response
+
         @app.middleware("http")
         async def metrics_middleware(request, call_next):
             import time as _time_module
@@ -169,13 +222,6 @@ def setup_observability(app: FastAPI, service_name: str, log_level: str = "INFO"
 
         metrics_app = make_asgi_app()
         app.mount("/metrics", metrics_app)
-
-        @app.middleware("http")
-        async def request_id_middleware(request, call_next):
-            request_id = request.headers.get("X-Request-Id", str(_uuid.uuid4()))
-            response = await call_next(request)
-            response.headers["X-Request-Id"] = request_id
-            return response
 
     except Exception as e:
         logger.error("Observability setup failed (service continues): %s", e)
