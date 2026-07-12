@@ -469,6 +469,49 @@ docker compose logs backup-service --tail=100
 
 > Se um backup individual falhar, o restante do ciclo continua e o serviço registra a falha sem derrubar os demais containers.
 
+## Documentação relacionada
+
+### Arquitetura e visão geral
+
+- [Arquitetura de Software](../DOCUMENTATION/ARQUITETURA_DE_SOFTWARE.md) — Visão geral da arquitetura, padrões e decisões técnicas
+- [Arquitetura Global](../DOCUMENTATION/ETAPA_1_ARQUITETURA_GLOBAL.md) — Diagramas de componentes, fluxos e comunicação entre serviços
+- [Diagrama de Visão Funcional](../DOCUMENTATION/DIAGRAMA_DE_VISAO_FUNCIONAL_DO_SISTEMA.md) — Mapa funcional do sistema
+- [Diagrama de Casos de Uso](../DOCUMENTATION/DIAGRAMA_DE_CASOS_DE_USO.md) — Casos de uso por ator do sistema
+
+### Microserviços
+
+- [IAM Service](../DOCUMENTATION/ETAPA_3_Iam_Service_Fastapi_Production.md) — Autenticação, autorização e gestão de usuários
+- [Patient Service](../DOCUMENTATION/ETAPA_4_Patient_Service_Fastapi_Clean_Architecture.md) — Cadastro de pacientes, alergias, vacinas
+- [Clinical Service](../DOCUMENTATION/ETAPA_5_Clinical_Service_Fastapi_Production.md) — Consultas, prontuários e prescrições
+- [AI Service](../DOCUMENTATION/ETAPA_6_Ai_Service_Fastapi_Async_Clean_Architecture.md) — Análise clínica com IA
+- [Reporting Service](../DOCUMENTATION/ETAPA_7_Reporting_Service_Fastapi_Production.md) — Relatórios e exportações assíncronas
+- [API Gateway](../DOCUMENTATION/ETAPA_8_Api_Gateway_Fastapi_Production.md) — Roteamento, autenticação e agregação
+
+### Infraestrutura e operações
+
+- [Infraestrutura Distribuída (Docker)](../DOCUMENTATION/ETAPA_10_Infraestrutura_Distribuida_Docker_Rabbitmq_Postgresql.md) — Orquestração com Docker Compose, volumes e redes
+- [Eventos e Mensageria (RabbitMQ)](../DOCUMENTATION/ETAPA_2_Eventos_Rabbitmq%20_Arquitetura_Event_Driven.md) — Arquitetura orientada a eventos
+- [Observabilidade](../DOCUMENTATION/ETAPA_11_Observabilidade_Distribuida_Prometheus_Grafana_Loki.md) — Prometheus, Grafana, Loki e Jaeger
+- [CI/CD](../DOCUMENTATION/ETAPA_12_Cicd_Distribuido_Github_Actions_Docker.md) — Pipeline de integração contínua com GitHub Actions
+- [Backup e Restore](../DOCUMENTATION/OPERACIONAL_BACKUP_RESTORE.md) — Procedimentos operacionais de backup e recuperação
+
+### Modelos de dados
+
+- [Modelo Lógico do Banco de Dados](../DOCUMENTATION/ETAPA_14_Modelo_Logico_Do_Banco_De_Dados.md) — Visão geral dos modelos relacionais
+- [Modelo Lógico IAM Service](../DOCUMENTATION/ETAPA_14_Modelo_Logico_IAM_Service.md) — Tabelas de usuários, roles e permissões
+- [Modelo Lógico Patient Service](../DOCUMENTATION/ETAPA_14_Modelo_Logico_Patient_Service.md) — Tabelas de pacientes, alergias e vacinas
+- [Modelo Lógico Clinical Service](../DOCUMENTATION/ETAPA_14_Modelo_Logico_Clinical_Service.md) — Tabelas de consultas, prontuários e prescrições
+- [Modelo Lógico AI Service](../DOCUMENTATION/ETAPA_14_Modelo_Logico_AI_Service.md) — Coleções do MongoDB para análises
+- [Modelo Lógico Reporting Service](../DOCUMENTATION/ETAPA_14_Modelo_Logico_Reporting_Service.md) — Tabelas de jobs e estatísticas
+
+### Planejamento e requisitos
+
+- [Requisitos e Histórias de Usuário](../DOCUMENTATION/REQUISITOS_HISTORIAS_DE_USUARIOS.md) — Funcionalidades detalhadas por papel de usuário
+- [Planejamento de Endpoints](../DOCUMENTATION/PLANEJAMENTO_DE_ENDPOINTS_PI.md) — Mapeamento completo de rotas da API
+- [Processo de Software](../DOCUMENTATION/ETAPA_13_Definicao_Do_Processo_De_Software.md) — Metodologia, sprints e práticas de desenvolvimento
+- [Logs de Auditoria](../DOCUMENTATION/ETAPA_15_Planejamento_De_Logs_De_Auditoria.md) — Estratégia de auditoria e rastreabilidade
+- [Status Geral do Sistema](../DOCUMENTATION/STATUS_GERAL_DO_SISTEMA.md) — Acompanhamento do progresso de implementação
+
 ## Contribuindo
 
 1. Fork do repositório
