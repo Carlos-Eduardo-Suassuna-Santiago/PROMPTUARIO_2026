@@ -136,6 +136,9 @@ export const appointmentsApi = {
   cancel: (id: string, reason: string) =>
     api.put<Appointment>(`/appointments/${id}/cancel`, { reason }).then(r => r.data),
 
+  confirm: (id: string) =>
+    api.put<Appointment>(`/appointments/${id}/confirm`).then(r => r.data),
+
   complete: (id: string) =>
     api.put<Appointment>(`/appointments/${id}/complete`).then(r => r.data),
 }

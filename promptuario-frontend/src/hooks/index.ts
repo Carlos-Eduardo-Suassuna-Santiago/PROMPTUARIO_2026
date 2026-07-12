@@ -252,6 +252,14 @@ export function useCancelAppointment() {
   })
 }
 
+export function useConfirmAppointment() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (id: string) => appointmentsApi.confirm(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: keys.appointments.all }),
+  })
+}
+
 // ─── Medical Records ────────────────────────────────────────────────────────
 export function usePatientRecords(patientId: string) {
   return useQuery({
