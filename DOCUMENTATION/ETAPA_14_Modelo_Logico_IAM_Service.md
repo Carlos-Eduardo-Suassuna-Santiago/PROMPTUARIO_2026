@@ -10,7 +10,7 @@ Este documento descreve o modelo lógico do IAM Service, responsável por identi
 |------|------|------|------|-----------|
 | id | UUID/String(36) | Não | PK | Identificador do usuário |
 | email | varchar(255) | Não | UK | E-mail único de acesso |
-| hashed_password | varchar(128) | Não | - | Senha com hash |
+| hashed_password | varchar(128) | Não | - | Senha com hash (bcrypt) |
 | full_name | varchar(255) | Não | - | Nome completo |
 | role | enum | Não | - | ADMIN, DOCTOR, ATTENDANT, PATIENT |
 | is_active | boolean | Não | - | Indica se está ativo |
