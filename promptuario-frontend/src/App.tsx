@@ -22,9 +22,7 @@ const PatientRegisterPage = lazy(() =>
 const OAuthCallback = lazy(() =>
   import('@/pages/auth/OAuthCallback').then((m) => ({ default: m.OAuthCallback }))
 )
-const ForgotPasswordPage = lazy(() =>
-  import('@/pages/auth/ForgotPasswordPage').then((m) => ({ default: m.ForgotPasswordPage }))
-)
+
 const TwoFactorPage = lazy(() =>
   import('@/pages/auth/TwoFactorPage').then((m) => ({ default: m.TwoFactorPage }))
 )
