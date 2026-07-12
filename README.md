@@ -10,7 +10,7 @@ O Promptuário DSD é uma plataforma composta por microserviços para gerenciar 
 
 Arquitetura principal (microserviços):
 
-- `iam-service`: serviço de identidade e autorização (usuários, roles, tokens).
+- `iam-service`: serviço de identidade e autorização (usuários, roles, tokens, OAuth2 Google).
 - `patient-service`: gerencia dados de pacientes e histórico clínico.
 - `clinical-service`: manipula casos clínicos, registros e fluxos clínicos.
 - `ai-service`: responsável por processamento assíncrono e modelos de IA.
@@ -20,20 +20,41 @@ Arquitetura principal (microserviços):
 
 Comunicação e infraestrutura:
 
-- Comunicação entre serviços via eventos (ex.: RabbitMQ) e HTTP/REST para chamadas síncronas.
-- Persistência em cada serviço (Postgres/Migrations) quando aplicável.
-- Orquestração para desenvolvimento e deploy via `docker-compose` e imagens Docker.
-- Observabilidade com Prometheus/Grafana/Loki (conforme documentação em `DOCUMENTATION/`).
+- Comunicação entre serviços via eventos (RabbitMQ) e HTTP/REST para chamadas síncronas.
+- Persistência em cada serviço: PostgreSQL (4 bancos) + MongoDB (AI Service).
+- Orquestração via `docker-compose` com 11+ serviços.
+- Observabilidade com Prometheus/Grafana/Jaeger/OpenTelemetry/Loki.
 
 ## Requisitos
 
-- Python 3.10+ (recomendado)
+- Python 3.12+ (recomendado)
 - Docker & Docker Compose (para execução em container)
 - Make (opcional, para atalhos de comandos)
 
+## Executando com Docker Compose (integração completa)
+
+Na pasta `backend/`:
+
+```bash
+cd backend
+docker compose up --build
+```
+
+Para rodar em segundo plano:
+
+```bash
+docker compose up -d --build
+```
+
+Para parar e remover containers:
+
+```bash
+docker compose down
+```
+
 ## Executando localmente (modo desenvolvimento)
 
-1. Crie e ative um ambiente virtual (Windows PowerShell):
+1. Crie e ative um ambiente virtual:
 
 ```powershell
 python -m venv .venv
@@ -43,62 +64,64 @@ python -m venv .venv
 2. Instale dependências do serviço que deseja executar (ex.: `ai-service`):
 
 ```powershell
-cd promptuario-backend\ai-service
+cd backend\ai-service
 pip install -r requirements.txt
 ```
 
-3. Execute o serviço (exemplo com FastAPI):
+3. Execute o serviço:
 
 ```powershell
 uvicorn app.main:app --reload --host 0.0.0.0 --port 8001
 ```
 
-4. Cada serviço tem sua própria pasta com `requirements.txt`, `Dockerfile` e testes. Consulte `README.md` local de cada serviço quando existir.
-
-## Executando com Docker Compose (integração completa)
-
-1. No diretório raiz (onde está `docker-compose.yml` ou em `promptuario-backend`), suba os serviços:
-
-```bash
-cd promptuario-backend
-docker-compose up --build
-```
-
-2. Para rodar em segundo plano:
-
-```bash
-docker-compose up -d --build
-```
-
-3. Para parar e remover containers:
-
-```bash
-docker-compose down
-```
-
-Observação: O repositório pode incluir múltiplos `docker-compose` (por serviço ou orquestração completa). Verifique o arquivo `docker-compose.yml` correto em `promptuario-backend/`.
-
 ## Banco de dados e migrações
 
-- Cada serviço que usa banco de dados inclui uma pasta `migrations/`. Use as ferramentas de migração do respectivo serviço (por exemplo, Alembic para SQLAlchemy) para aplicar migrações localmente ou via container.
+Cada serviço que usa banco de dados utiliza SQLAlchemy async com `create_all` no startup. Migrações com Alembic podem ser adicionadas conforme necessidade.
 
 ## Testes
 
 Execute os testes por serviço:
 
 ```powershell
-cd promptuario-backend\ai-service
+cd backend\ai-service
 pytest -q
 ```
 
-## Scripts úteis
+## Smoke tests
 
-- `scripts/fastapi_services_smoke.py`: script para smoke tests dos serviços FastAPI.
-- `scripts/insomnia_auth_smoke.py`: helper para testes de autenticação via Insomnia.
+```powershell
+cd backend
+python scripts/fastapi_services_smoke.py
+```
 
 ## Documentação
 
-Documentação técnica, diagramas e planejamentos estão em `DOCUMENTATION/` e `DOCUMENTATION/DIAGRAMS/`. Consulte os arquivos para arquitetura, endpoints planejados e observabilidade.
+Documentação técnica, diagramas e planejamentos estão em `DOCUMENTATION/` e `DOCUMENTATION/DIAGRAMS/`.
+
+## Estrutura do Projeto
+
+```
+PROMPTUARIO_2026/
+├── backend/
+│   ├── docker-compose.yml        # Orquestração completa
+│   ├── Makefile                  # Comandos padronizados
+│   ├── .env.example              # Template de variáveis
+│   │
+│   ├── iam-service/              # Porta 8001
+│   ├── patient-service/          # Porta 8002
+│   ├── clinical-service/         # Porta 8003
+│   ├── ai-service/               # Porta 8004
+│   ├── reporting-service/        # Porta 8005
+│   ├── gateway/                  # Porta 8000
+│   ├── shared/                   # Código compartilhado
+│   ├── backup/                   # Serviço de backup
+│   ├── observability/            # Configs Prometheus/Grafana
+│   └── scripts/                  # Scripts utilitários
+│
+├── promptuario-frontend/         # Frontend React + TypeScript
+├── ci/                           # CI/CD helpers
+└── DOCUMENTATION/                # Documentação técnica
+```
 
 ## Contribuição
 
