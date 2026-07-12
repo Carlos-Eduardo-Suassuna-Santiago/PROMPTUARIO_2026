@@ -4,6 +4,7 @@ import logging
 import os
 import sys
 import uuid as _uuid
+from typing import Any
 
 from fastapi import FastAPI
 from opentelemetry import trace
@@ -17,6 +18,35 @@ import time as _time
 from pythonjsonlogger import jsonlogger
 
 logger = logging.getLogger(__name__)
+
+
+def register_resilience_metrics(app: FastAPI, service_name: str) -> dict[str, Any]:
+    cache_hits_total = Counter(
+        "gateway_cache_hits_total",
+        "Cache hits for gateway responses",
+        ["service", "route"],
+    )
+    cache_misses_total = Counter(
+        "gateway_cache_misses_total",
+        "Cache misses for gateway responses",
+        ["service", "route"],
+    )
+    circuit_open_total = Counter(
+        "gateway_circuit_open_total",
+        "Times the gateway circuit breaker opened",
+        ["service", "target"],
+    )
+    circuit_state = Gauge(
+        "gateway_circuit_state",
+        "Current circuit breaker state for downstream targets",
+        ["service", "target"],
+    )
+    return {
+        "cache_hits_total": cache_hits_total,
+        "cache_misses_total": cache_misses_total,
+        "circuit_open_total": circuit_open_total,
+        "circuit_state": circuit_state,
+    }
 
 
 def setup_observability(app: FastAPI, service_name: str, log_level: str = "INFO") -> None:
