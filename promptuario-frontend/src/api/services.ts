@@ -23,6 +23,12 @@ export const authApi = {
   changePassword: (current_password: string, new_password: string) =>
     api.post('/auth/change-password', { current_password, new_password }),
 
+  requestPasswordReset: (email: string) =>
+    api.post('/auth/password/reset', { email }),
+
+  verifyTwoFactor: (email: string, code: string) =>
+    api.post('/auth/2fa/verify', { email, code }),
+
   me: () => api.get<User>('/users/me').then(r => r.data),
 
   // OAuth — list linked accounts

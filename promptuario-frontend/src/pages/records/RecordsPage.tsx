@@ -232,7 +232,17 @@ function RecordDetailView({ recordId }: { recordId: string }) {
   const requestAnalysis = useRequestAnalysis()
 
   if (isLoading) return <PageLoader />
-  if (!record) return <div className="text-slate-400 p-6">Prontuário não encontrado</div>
+  if (!record) return (
+    <Card>
+      <CardBody>
+        <EmptyState
+          icon={<FileText className="w-7 h-7" />}
+          title="Prontuário não encontrado"
+          description="O prontuário solicitado não está disponível ou foi removido."
+        />
+      </CardBody>
+    </Card>
+  )
 
   const handleAnalyze = async () => {
     setAnalysisLoading(true)
@@ -336,8 +346,12 @@ function RecordDetailView({ recordId }: { recordId: string }) {
                     icon={<Download className="w-3.5 h-3.5" />}
                     onClick={async () => {
                       try {
-                        const blob = await recordsApi.downloadPrescription(record.id, rx.id)
-                        const url = window.URL.createObjectURL(blob as unknown as Blob)
+                        const response = await recordsApi.downloadPrescription(record.id, rx.id)
+                        const contentType = typeof response.headers['content-type'] === 'string'
+                          ? response.headers['content-type']
+                          : 'application/pdf'
+                        const blob = new Blob([response.data], { type: contentType })
+                        const url = window.URL.createObjectURL(blob)
                         const a = document.createElement('a')
                         a.href = url
                         a.download = `prescricao-${rx.id.slice(0, 8)}.pdf`
@@ -531,7 +545,7 @@ export function RecordsPage() {
             <EmptyState
               icon={<ClipboardList className="w-8 h-8" />}
               title="Nenhum prontuário registrado"
-              description="Os prontuários são criados após as consultas"
+              description="Os prontuários são criados após as consultas e aparecem aqui para revisão clínica."
               action={
                 isDoctor ? (
                   <Button icon={<Plus className="w-4 h-4" />} onClick={() => setCreateModal(true)}>

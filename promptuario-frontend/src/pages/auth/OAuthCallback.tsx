@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
+import { Alert } from '@/components/ui'
 import { useAuthStore } from '@/store/auth.store'
 import { tokenStorage } from '@/api/client'
 import { authApi } from '@/api/services'
@@ -51,7 +52,7 @@ export function OAuthCallback() {
             </svg>
           </div>
           <h2 className="text-lg font-semibold text-slate-100 mb-2">Falha na autenticação</h2>
-          <p className="text-slate-400 text-sm mb-6">{error}</p>
+          <Alert variant="error" className="mb-6 text-left">{error}</Alert>
           <button
             onClick={() => navigate('/login', { replace: true })}
             className="inline-flex items-center gap-2 px-4 py-2 bg-brand-500 hover:bg-brand-400 text-white rounded-xl text-sm font-medium transition-all"

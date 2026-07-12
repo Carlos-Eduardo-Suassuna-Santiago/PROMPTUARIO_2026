@@ -432,6 +432,43 @@ uvicorn app.main:app --reload --port 8001
 - Audit trail imutável em `MedicalRecordHistory`
 - Tokens JWT com blacklist via Redis
 
+## Backup operacional e recuperação
+
+O ambiente já inclui um serviço dedicado de backup automático que:
+- cria dumps do PostgreSQL e do MongoDB;
+- grava artefatos em um volume persistente em `/var/backups`;
+- envia cópias para o MinIO no bucket `backups`;
+- registra o status da última execução em `status.json`.
+
+### Execução manual
+
+```bash
+make backup-once
+```
+
+### Execução agendada
+
+O serviço `backup-service` roda em modo agendado no `docker-compose.yml` e executa backups a cada 24h por padrão. Ajuste `BACKUP_SCHEDULE_HOURS` se precisar de outra periodicidade.
+
+### Restore controlado
+
+```bash
+# PostgreSQL
+make restore-db FILE=/var/backups/postgresql/iam_db/2026/07/11/postgres_iam_db_20260711_120000.sql.gz TARGET=iam_db
+
+# MongoDB
+make restore-mongo FILE=/var/backups/mongodb/ai_db/2026/07/11/mongo_ai_db_20260711_120000.archive.gz TARGET=ai_db
+```
+
+### Verificação básica
+
+```bash
+make status
+docker compose logs backup-service --tail=100
+```
+
+> Se um backup individual falhar, o restante do ciclo continua e o serviço registra a falha sem derrubar os demais containers.
+
 ## Contribuindo
 
 1. Fork do repositório
