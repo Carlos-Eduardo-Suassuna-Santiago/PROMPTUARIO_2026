@@ -31,10 +31,30 @@ O `clinical-service` será responsável por:
 
 # 3. CLEAN ARCHITECTURE
 
-    )
+```mermaid
+graph TD
 
-    UUID(as_uuid=True),
+API[API Layer]
 
+SERVICE[Service Layer]
+
+REPOSITORY[Repository Layer]
+
+DOMAIN[Domain Models]
+
+DB[(PostgreSQL)]
+
+RABBIT[(RabbitMQ)]
+
+S3[(MinIO/S3)]
+
+API --> SERVICE
+SERVICE --> REPOSITORY
+SERVICE --> DOMAIN
+REPOSITORY --> DB
+SERVICE --> RABBIT
+SERVICE --> S3
+```
 # 4. ESTRUTURA DO PROJETO
 
 ```text
@@ -210,57 +230,32 @@ def get_db():
 ```python
 import uuid
 
-from sqlalchemy import Column
-from sqlalchemy import String
-from sqlalchemy import Text
-from sqlalchemy import DateTime
-
+from sqlalchemy import Column, String, Text, DateTime
 from sqlalchemy.sql import func
-
 from sqlalchemy.dialects.postgresql import UUID
 
 from app.core.database import Base
 
 
 class MedicalRecord(Base):
-
     __tablename__ = "medical_records"
 
-        id = Column(
-
----
-
-                )
-        )
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    appointment_id = Column(UUID(as_uuid=True), unique=True, nullable=False)
+    patient_id = Column(UUID(as_uuid=True), nullable=False, index=True)
+    doctor_id = Column(UUID(as_uuid=True), nullable=False, index=True)
+    chief_complaint = Column(Text, nullable=False)
+    anamnesis = Column(Text, nullable=True)
+    physical_exam = Column(Text, nullable=True)
+    diagnosis = Column(Text, nullable=True)
+    diagnosis_codes = Column(Text, nullable=True)  # JSON array
+    treatment_plan = Column(Text, nullable=True)
+    observations = Column(Text, nullable=True)
+    ai_analysis_id = Column(String(36), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 ```
 
----
-
-        )
-        UUID(as_uuid=True),
-        primary_key=True,
-        default=uuid.uuid4
-    )
-
-    patient_id = Column(UUID(as_uuid=True), nullable=False)
-
-    doctor_id = Column(UUID(as_uuid=True), nullable=False)
-
-    diagnosis = Column(Text, nullable=False)
-
-    symptoms = Column(Text, nullable=True)
-
-    notes = Column(Text, nullable=True)
-
-    status = Column(String, default="open")
-
-    created_at = Column(
-        DateTime(timezone=True),
-        server_default=func.now()
-    )
-```
-
----
 
 # 9. PRESCRIPTION MODEL
 
@@ -281,33 +276,14 @@ from app.core.database import Base
 
 
 class Prescription(Base):
-
     __tablename__ = "prescriptions"
 
-        id = Column(
-
-```
-
-        UUID(as_uuid=True),
-        primary_key=True,
-        default=uuid.uuid4
-    )
-
-    medical_record_id = Column(
-        UUID(as_uuid=True),
-        nullable=False
-    )
-
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    medical_record_id = Column(UUID(as_uuid=True), nullable=False)
     medication = Column(Text, nullable=False)
-
     dosage = Column(Text, nullable=False)
-
     instructions = Column(Text, nullable=False)
-
-    created_at = Column(
-        DateTime(timezone=True),
-        server_default=func.now()
-    )
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
 ```
 
 ---
@@ -366,20 +342,28 @@ class Exam(Base):
 ```python
 import uuid
 
-from sqlalchemy import Column
-from sqlalchemy import String
-from sqlalchemy import Text
-from sqlalchemy import DateTime
-
+from sqlalchemy import Column, String, Text, DateTime, JSON
 from sqlalchemy.sql import func
-
 from sqlalchemy.dialects.postgresql import UUID
 
 from app.core.database import Base
 
 
 class AuditLog(Base):
-
     __tablename__ = "audit_logs"
 
-    id = Column(
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    operation = Column(String(50), nullable=False)
+    entity_type = Column(String(100), nullable=False)
+    entity_id = Column(String(36), nullable=False)
+    user_id = Column(String(36), nullable=False)
+    old_values = Column(JSON, nullable=True)
+    new_values = Column(JSON, nullable=True)
+    ip_address = Column(String(45), nullable=True)
+    user_agent = Column(Text, nullable=True)
+    status = Column(String(20), nullable=False, default="SUCCESS")
+    error_reason = Column(Text, nullable=True)
+    request_id = Column(String(36), nullable=True)
+    timestamp = Column(DateTime(timezone=True), server_default=func.now())
+    metadata = Column(JSON, nullable=True)
+```
