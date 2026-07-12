@@ -52,7 +52,7 @@ Este microsserviço existe para proteger o sistema e garantir que apenas usuári
 - PostgreSQL disponível
 - Redis disponível
 - RabbitMQ disponível
-- Python 3.11+
+- Python 3.12+
 
 ## Início rápido
 
@@ -68,7 +68,7 @@ uvicorn app.main:app --reload --port 8001
 
 ```bash
 cd backend
-docker-compose up --build iam-service
+docker compose up --build iam-service
 ```
 
 ## Endpoints principais
