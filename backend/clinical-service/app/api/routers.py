@@ -116,6 +116,19 @@ async def cancel_appointment(
 
 
 @appointments_router.put(
+    "/{appointment_id}/confirm",
+    response_model=AppointmentResponse,
+    dependencies=[Depends(require_roles("DOCTOR", "ADMIN", "ATTENDANT"))],
+)
+async def confirm_appointment(appointment_id: str, request: Request, user=Depends(get_current_user)):
+    async with _sf(request)() as session:
+        svc = AppointmentService(session, _pub(request))
+        result = await svc.confirm(appointment_id)
+        consultations_total.labels(service=_settings.SERVICE_NAME, status="confirmed").inc()
+        return AppointmentResponse.model_validate(result)
+
+
+@appointments_router.put(
     "/{appointment_id}/complete",
     response_model=AppointmentResponse,
     dependencies=[Depends(require_roles("DOCTOR", "ADMIN"))],

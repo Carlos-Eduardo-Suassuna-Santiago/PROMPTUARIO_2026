@@ -10,6 +10,7 @@ import {
 import {
   usePatient, usePatientAllergies, usePatientVaccines,
   usePatientMedications, useAddAllergy, useDeleteAllergy,
+  useAddVaccine, useAddMedication, useDeleteMedication,
   useAppointments,
 } from '@/hooks'
 import { PageHeader } from '@/components/layout/AppShell'
@@ -21,9 +22,113 @@ import {
   formatDate, formatDateTime, calculateAge,
   SEVERITY_COLORS, STATUS_LABELS, STATUS_COLORS, cn, getErrorMessage,
 } from '@/utils'
-import { useIsDoctor, useIsAdmin } from '@/store/auth.store'
+import { useIsDoctor, useIsAdmin, useIsAttendant } from '@/store/auth.store'
 
 type Tab = 'overview' | 'allergies' | 'vaccines' | 'medications' | 'appointments'
+
+const medicationSchema = z.object({
+  name: z.string().min(2, 'Nome do medicamento obrigatório'),
+  dosage: z.string().min(1, 'Dosagem obrigatória'),
+  frequency: z.string().min(1, 'Frequência obrigatória'),
+  prescribing_doctor: z.string().optional(),
+  started_at: z.string().optional(),
+  notes: z.string().optional(),
+})
+type MedicationForm = z.infer<typeof medicationSchema>
+
+function AddMedicationModal({ patientId, open, onClose }: { patientId: string; open: boolean; onClose: () => void }) {
+  const [error, setError] = useState<string | null>(null)
+  const addMedication = useAddMedication()
+  const { register, handleSubmit, reset, formState: { errors } } = useForm<MedicationForm>({
+    resolver: zodResolver(medicationSchema),
+  })
+
+  const onSubmit = async (data: MedicationForm) => {
+    setError(null)
+    try {
+      await addMedication.mutateAsync({ patientId, data })
+      reset()
+      onClose()
+    } catch (err) {
+      setError(getErrorMessage(err))
+    }
+  }
+
+  return (
+    <Modal
+      open={open}
+      onClose={onClose}
+      title="Adicionar Medicamento"
+      footer={
+        <>
+          <Button variant="ghost" onClick={onClose}>Cancelar</Button>
+          <Button onClick={handleSubmit(onSubmit)} loading={addMedication.isPending}>Salvar</Button>
+        </>
+      }
+    >
+      {error && <Alert variant="error" className="mb-4">{error}</Alert>}
+      <div className="space-y-4">
+        <Input label="Nome do Medicamento *" placeholder="Losartana, Omeprazol…" error={errors.name?.message} {...register('name')} />
+        <Input label="Dosagem *" placeholder="50mg, 20mg…" error={errors.dosage?.message} {...register('dosage')} />
+        <Input label="Frequência *" placeholder="1x ao dia, 12/12h…" error={errors.frequency?.message} {...register('frequency')} />
+        <Input label="Médico Prescritor" placeholder="Dr. Nome" {...register('prescribing_doctor')} />
+        <Input label="Data de início" type="date" {...register('started_at')} />
+        <Input label="Observações" {...register('notes')} />
+      </div>
+    </Modal>
+  )
+}
+
+const vaccineSchema = z.object({
+  name: z.string().min(2, 'Nome da vacina obrigatório'),
+  dose: z.string().optional(),
+  applied_at: z.string().optional(),
+  next_dose_at: z.string().optional(),
+  notes: z.string().optional(),
+})
+type VaccineForm = z.infer<typeof vaccineSchema>
+
+function AddVaccineModal({ patientId, open, onClose }: { patientId: string; open: boolean; onClose: () => void }) {
+  const [error, setError] = useState<string | null>(null)
+  const addVaccine = useAddVaccine()
+  const { register, handleSubmit, reset, formState: { errors } } = useForm<VaccineForm>({
+    resolver: zodResolver(vaccineSchema),
+  })
+
+  const onSubmit = async (data: VaccineForm) => {
+    setError(null)
+    try {
+      await addVaccine.mutateAsync({ patientId, data })
+      reset()
+      onClose()
+    } catch (err) {
+      setError(getErrorMessage(err))
+    }
+  }
+
+  return (
+    <Modal
+      open={open}
+      onClose={onClose}
+      title="Adicionar Vacina"
+      footer={
+        <>
+          <Button variant="ghost" onClick={onClose}>Cancelar</Button>
+          <Button onClick={handleSubmit(onSubmit)} loading={addVaccine.isPending}>Salvar</Button>
+        </>
+      }
+    >
+      {error && <Alert variant="error" className="mb-4">{error}</Alert>}
+      <div className="space-y-4">
+        <Input label="Nome da Vacina *" placeholder="BCG, Hepatite B…" error={errors.name?.message} {...register('name')} />
+        <Input label="Dose" placeholder="1ª dose, 2ª dose…" {...register('dose')} />
+        <Input label="Data de aplicação" type="date" {...register('applied_at')} />
+        <Input label="Próxima dose" type="date" {...register('next_dose_at')} />
+        <Input label="Observações" {...register('notes')} />
+      </div>
+    </Modal>
+  )
+}
 
 const allergySchema = z.object({
   substance: z.string().min(2, 'Substância obrigatória'),
@@ -98,7 +203,9 @@ export function PatientDetailPage() {
   const navigate = useNavigate()
   const [tab, setTab] = useState<Tab>('overview')
   const [allergyModal, setAllergyModal] = useState(false)
-  const canEdit = useIsDoctor() || useIsAdmin()
+  const [vaccineModal, setVaccineModal] = useState(false)
+  const [medicationModal, setMedicationModal] = useState(false)
+  const canEdit = useIsDoctor() || useIsAdmin() || useIsAttendant()
 
   const { data: patient, isLoading } = usePatient(id)
   const { data: allergies } = usePatientAllergies(id)
@@ -106,6 +213,7 @@ export function PatientDetailPage() {
   const { data: medications } = usePatientMedications(id)
   const { data: appointments } = useAppointments({ patient_id: id, page: 1, size: 10 })
   const deleteAllergy = useDeleteAllergy()
+  const deleteMedication = useDeleteMedication()
 
   if (isLoading) return <PageLoader />
   if (!patient) return <div className="text-slate-400 p-6">Paciente não encontrado</div>
@@ -262,7 +370,7 @@ export function PatientDetailPage() {
                   <Th>Gravidade</Th>
                   <Th>Tipo de Reação</Th>
                   <Th>Registrado em</Th>
-                  {canEdit && <Th />}
+                  {canEdit && <Th>Ações</Th>}
                 </tr>
               </thead>
               <tbody>
@@ -297,11 +405,26 @@ export function PatientDetailPage() {
       {tab === 'vaccines' && (
         <Card>
           <CardHeader>
-            <h3 className="text-sm font-semibold text-slate-200">Cartão de Vacinação</h3>
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-semibold text-slate-200">Cartão de Vacinação</h3>
+              {canEdit && (
+                <Button size="sm" icon={<Plus className="w-3.5 h-3.5" />} onClick={() => setVaccineModal(true)}>
+                  Adicionar
+                </Button>
+              )}
+            </div>
           </CardHeader>
           {!vaccines?.length ? (
             <CardBody>
-              <EmptyState icon={<Syringe className="w-7 h-7" />} title="Nenhuma vacina registrada" />
+              <EmptyState
+                icon={<Syringe className="w-7 h-7" />}
+                title="Nenhuma vacina registrada"
+                action={canEdit ? (
+                  <Button size="sm" icon={<Plus className="w-3.5 h-3.5" />} onClick={() => setVaccineModal(true)}>
+                    Adicionar Vacina
+                  </Button>
+                ) : undefined}
+              />
             </CardBody>
           ) : (
             <Table>
@@ -331,11 +454,26 @@ export function PatientDetailPage() {
       {tab === 'medications' && (
         <Card>
           <CardHeader>
-            <h3 className="text-sm font-semibold text-slate-200">Medicamentos Contínuos</h3>
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-semibold text-slate-200">Medicamentos Contínuos</h3>
+              {canEdit && (
+                <Button size="sm" icon={<Plus className="w-3.5 h-3.5" />} onClick={() => setMedicationModal(true)}>
+                  Adicionar
+                </Button>
+              )}
+            </div>
           </CardHeader>
           {!medications?.length ? (
             <CardBody>
-              <EmptyState icon={<Pill className="w-7 h-7" />} title="Nenhum medicamento contínuo" />
+              <EmptyState
+                icon={<Pill className="w-7 h-7" />}
+                title="Nenhum medicamento contínuo"
+                action={canEdit ? (
+                  <Button size="sm" icon={<Plus className="w-3.5 h-3.5" />} onClick={() => setMedicationModal(true)}>
+                    Adicionar Medicamento
+                  </Button>
+                ) : undefined}
+              />
             </CardBody>
           ) : (
             <Table>
@@ -346,6 +484,7 @@ export function PatientDetailPage() {
                   <Th>Frequência</Th>
                   <Th>Médico Prescritor</Th>
                   <Th>Desde</Th>
+                  {canEdit && <Th>Ações</Th>}
                 </tr>
               </thead>
               <tbody>
@@ -356,6 +495,20 @@ export function PatientDetailPage() {
                     <Td>{m.frequency}</Td>
                     <Td>{m.prescribing_doctor ?? '—'}</Td>
                     <Td>{formatDate(m.started_at)}</Td>
+                    {canEdit && (
+                      <Td>
+                        <button
+                          onClick={() => {
+                            if (confirm('Remover este medicamento permanentemente?')) {
+                              deleteMedication.mutate({ patientId: id, medId: m.id })
+                            }
+                          }}
+                          className="p-1.5 rounded-lg text-slate-600 hover:text-rose-400 hover:bg-rose-500/10 transition-colors"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </Td>
+                    )}
                   </tr>
                 ))}
               </tbody>
@@ -408,6 +561,16 @@ export function PatientDetailPage() {
         patientId={id}
         open={allergyModal}
         onClose={() => setAllergyModal(false)}
+      />
+      <AddVaccineModal
+        patientId={id}
+        open={vaccineModal}
+        onClose={() => setVaccineModal(false)}
+      />
+      <AddMedicationModal
+        patientId={id}
+        open={medicationModal}
+        onClose={() => setMedicationModal(false)}
       />
     </div>
   )

@@ -4,12 +4,12 @@ PROMPTUARIO — Script de População do Banco de Dados (Simulação Real)
 ====================================================================
 Cria uma massa de dados completa e realista no sistema respeitando
 estritamente as quantidades solicitadas:
-  • 1 Admin      (admin@promptuario.health)
-  • 1 Atendente  (atendente@promptuario.health)
-  • 48 Médicos   (Especialidades diversas, CRM e agendas prontas)
-  • 450 Pacientes (Dados clínicos completos, CPF válido, endereço)
+    • 1 Admin
+    • 11 Atendentes
+    • 288 Médicos   (Especialidades diversas, CRM e agendas prontas)
+    • 2700 Pacientes (Dados clínicos completos, CPF válido, endereço)
   ───────────────────────────────────────────────────────────────
-  Total exato: 500 usuários no sistema.
+    Total exato: 3000 usuários no sistema.
 
 Além do cadastro de usuários, o script simula o ecossistema hospitalar:
   • Agendamentos clínicos (Consultas, Retornos, Exames, Urgências)
@@ -132,6 +132,44 @@ CIDADES_ESTADOS = [
     ("Campinas", "SP", "13010-111"), ("Fortaleza", "CE", "60115-222")
 ]
 
+TOTAL_USUARIOS = 3000
+ADMIN_COUNT = 1
+ATTENDANT_COUNT = 11
+DOCTOR_COUNT = 288
+PATIENT_COUNT = 2700
+
+
+def gerar_nome_completo(genero: str | None = None) -> str:
+    """Gera nome completo brasileiro com alguma variação de gênero."""
+    if genero not in {"M", "F"}:
+        genero = random.choice(["M", "F"])
+    nome = random.choice(PRIMEIROS_NOMES_M if genero == "M" else PRIMEIROS_NOMES_F)
+    sobrenome1 = random.choice(SOBRENOMES)
+    sobrenome2 = random.choice(SOBRENOMES)
+    return f"{nome} {sobrenome1} {sobrenome2}"
+
+
+def carregar_usuarios_existentes(token: str, iam_url: str) -> dict[str, str]:
+    """Carrega todos os usuários já cadastrados para manter o seed idempotente."""
+    usuarios: dict[str, str] = {}
+    page = 1
+    size = 100
+
+    while True:
+        status, list_resp = http_request("GET", f"{iam_url}/users?page={page}&size={size}", token=token)
+        if status != 200 or not isinstance(list_resp, dict) or "items" not in list_resp:
+            break
+
+        for u in list_resp["items"]:
+            usuarios[u["email"].lower()] = u["id"]
+
+        total = int(list_resp.get("total", 0) or 0)
+        if page * size >= total:
+            break
+        page += 1
+
+    return usuarios
+
 
 # ─── FUNÇÕES UTILITÁRIAS DE GERADORES ─────────────────────────────────────────
 
@@ -225,7 +263,7 @@ def main():
 
     print("====================================================================")
     print("           PROMPTUARIO — POPULAÇÃO DO BANCO DE DADOS                ")
-    print("         Simulação Hospitalar Realista (Total: 500 Usuários)        ")
+    print("         Simulação Hospitalar Realista (Total: 3000 Usuários)       ")
     print("====================================================================")
 
     if not verificar_saude(servicos_check):
@@ -252,13 +290,9 @@ def main():
     print("      ✔ Acesso concedido (JWT obtido com sucesso)")
 
     # Buscar usuários já existentes para garantir idempotência
-    status, list_resp = http_request("GET", f"{iam_url}/users?page=1&size=100", token=token)
-    usuarios_existentes: dict[str, str] = {}
-    if status == 200 and isinstance(list_resp, dict) and "items" in list_resp:
-        for u in list_resp["items"]:
-            usuarios_existentes[u["email"].lower()] = u["id"]
+    usuarios_existentes = carregar_usuarios_existentes(token, iam_url)
 
-    # Identificar ID do Admin (Contará como 1 dos 500 usuários)
+    # Identificar ID do Admin (Contará como 1 dos 3000 usuários)
     admin_id = usuarios_existentes.get("admin@promptuario.health")
     if not admin_id:
         # Se por algum motivo o /me for mais preciso
@@ -269,33 +303,33 @@ def main():
     print(f"      ✔ Admin computado no sistema [ID: {admin_id[:8]}...]")
 
     # ──────────────────────────────────────────────────────────────────────────
-    # PASSO 2: Criar Atendente (1) e Médicos (48)
+    # PASSO 2: Criar Atendentes (11) e Médicos (288)
     # ──────────────────────────────────────────────────────────────────────────
-    print("\n[2/6] Cadastrando equipe clínica: 1 Atendente e 48 Médicos...")
+    print(f"\n[2/6] Cadastrando equipe clínica: {ATTENDANT_COUNT} Atendentes e {DOCTOR_COUNT} Médicos...")
     
     equipe_paralela = []
     
-    # 1 Atendente
-    equipe_paralela.append({
-        "email": "atendente@promptuario.health",
-        "password": "Password@123",
-        "full_name": "Carlos Eduardo — Recepção e Triagem",
-        "role": "ATTENDANT",
-        "tipo": "ATENDENTE"
-    })
-
-    # 48 Médicos
+    # Atendentes
     random.seed(2026)
+    for i in range(1, ATTENDANT_COUNT + 1):
+        genero = "M" if i % 2 == 0 else "F"
+        nome_completo = gerar_nome_completo(genero)
+        equipe_paralela.append({
+            "email": "atendente@promptuario.health" if i == 1 else f"atendente{i:02d}@promptuario.health",
+            "password": "Password@123",
+            "full_name": nome_completo,
+            "role": "ATTENDANT",
+            "tipo": "ATENDENTE"
+        })
+
+    # Médicos
     medicos_gerados = []
-    for i in range(1, 49):
+    for i in range(1, DOCTOR_COUNT + 1):
         esp = ESPECIALIDADES_MEDICAS[(i - 1) % len(ESPECIALIDADES_MEDICAS)]
         genero_m = (i % 2 == 0)
         titulo = "Dr." if genero_m else "Dra."
-        nome = random.choice(PRIMEIROS_NOMES_M if genero_m else PRIMEIROS_NOMES_F)
-        sobrenome1 = random.choice(SOBRENOMES)
-        sobrenome2 = random.choice(SOBRENOMES)
-        nome_completo = f"{titulo} {nome} {sobrenome1} {sobrenome2}"
-        email_med = f"medico{i:02d}@promptuario.health"
+        nome_completo = f"{titulo} {gerar_nome_completo('M' if genero_m else 'F')}"
+        email_med = f"medico{i:03d}@promptuario.health"
 
         equipe_paralela.append({
             "email": email_med,
@@ -342,8 +376,8 @@ def main():
                 "slots": slots
             }, token=token)
 
-            return {"id": u_id, "name": item["full_name"], "specialty": item.get("specialty"), "tipo": "MEDICO"}
-        return {"id": u_id, "name": item["full_name"], "tipo": "ATENDENTE"}
+            return {"id": u_id, "name": item["full_name"], "specialty": item.get("specialty"), "tipo": "MEDICO", "email": item["email"]}
+        return {"id": u_id, "name": item["full_name"], "tipo": "ATENDENTE", "email": item["email"]}
 
     medicos_cadastrados: list[dict[str, Any]] = []
     atendente_cadastrado = None
@@ -357,23 +391,20 @@ def main():
             elif res.get("tipo") == "ATENDENTE":
                 atendente_cadastrado = res
 
-    print(f"      ✔ 1 Atendente cadastrado: {atendente_cadastrado['name'] if atendente_cadastrado else 'OK'}")
-    print(f"      ✔ 48 Médicos cadastrados e com agendas de atendimento ativas.")
+    print(f"      ✔ {ATTENDANT_COUNT} Atendentes cadastrados: {atendente_cadastrado['name'] if atendente_cadastrado else 'OK'}")
+    print(f"      ✔ {DOCTOR_COUNT} Médicos cadastrados e com agendas de atendimento ativas.")
 
     # ──────────────────────────────────────────────────────────────────────────
-    # PASSO 3: Cadastrar Pacientes (450)
+    # PASSO 3: Cadastrar Pacientes (2700)
     # ──────────────────────────────────────────────────────────────────────────
-    print("\n[3/6] Cadastrando massa clínica de 450 Pacientes (Usuário + Perfil)...")
+    print(f"\n[3/6] Cadastrando massa clínica de {PATIENT_COUNT} Pacientes (Usuário + Perfil)...")
     
-    # Gerar 450 pacientes determinísticos
+    # Gerar pacientes determinísticos
     pacientes_paralelos = []
-    for p_idx in range(1, 451):
+    for p_idx in range(1, PATIENT_COUNT + 1):
         gen = random.choice(["M", "F"])
-        nome_p = random.choice(PRIMEIROS_NOMES_M if gen == "M" else PRIMEIROS_NOMES_F)
-        s1 = random.choice(SOBRENOMES)
-        s2 = random.choice(SOBRENOMES)
-        nome_comp = f"{nome_p} {s1} {s2}"
-        email_pac = f"paciente{p_idx:03d}@promptuario.health"
+        nome_comp = gerar_nome_completo(gen)
+        email_pac = f"paciente{p_idx:04d}@promptuario.health"
         cpf_pac = gerar_cpf(p_idx * 13 + 7)
         ano_nasc = random.randint(1945, 2018)
         mes_nasc = random.randint(1, 12)
@@ -411,7 +442,8 @@ def main():
                 "email": item["email"],
                 "password": item["password"],
                 "full_name": item["full_name"],
-                "role": item["role"]
+                "role": item["role"],
+                "cpf": item["cpf"]  # Send CPF to IAM so it's included in UserCreatedEvent
             }, token=token)
             if st in (200, 201):
                 u_id = r["id"]
@@ -420,20 +452,38 @@ def main():
             else:
                 return {"error": r}
 
-        # Cadastrar perfil no Patient Service
-        st_p, r_p = http_request("POST", f"{patient_url}/patients", body={
-            "user_id": u_id,
-            "full_name": item["full_name"],
-            "cpf": item["cpf"],
+        if u_id.startswith("exist-user"):
+            return {"user_id": u_id, "patient_id": f"pat-fallback-{item['idx']}", "name": item["full_name"], "idx": item["idx"]}
+
+        # 1. Login as the new patient to get their token
+        st_l, r_l = http_request("POST", f"{iam_url}/auth/login", body={"email": item["email"], "password": item["password"]})
+        if st_l != 200 or "access_token" not in r_l:
+            return {"error": f"Login failed for {email}"}
+        
+        pat_token = r_l["access_token"]
+        pat_id = None
+        
+        # 2. Poll GET /patients/me until the RabbitMQ consumer creates the patient
+        for _ in range(10):
+            st_me, r_me = http_request("GET", f"{patient_url}/patients/me", token=pat_token)
+            if st_me == 200 and "id" in r_me:
+                pat_id = r_me["id"]
+                break
+            time.sleep(0.5)
+
+        if not pat_id:
+            # Fallback if event consumer fails
+            return {"user_id": u_id, "patient_id": f"pat-fallback-{item['idx']}", "name": item["full_name"], "idx": item["idx"]}
+
+        # 3. Update the missing fields (blood_type, address, phone, date_of_birth, gender) via PUT
+        st_u, r_u = http_request("PUT", f"{patient_url}/patients/{pat_id}", body={
             "date_of_birth": item["date_of_birth"],
             "gender": item["gender"],
             "blood_type": item["blood_type"],
             "phone": item["phone"],
-            "email": item["email"],
             "address": item["address"]
-        }, token=token)
+        }, token=pat_token)
 
-        pat_id = r_p["id"] if st_p in (200, 201) and "id" in r_p else f"pat-fallback-{item['idx']}"
         return {"user_id": u_id, "patient_id": pat_id, "name": item["full_name"], "idx": item["idx"]}
 
     t_inicio = time.time()
@@ -444,20 +494,20 @@ def main():
             if "user_id" in res:
                 pacientes_cadastrados.append(res)
             progresso_pac += 1
-            if progresso_pac % 50 == 0 or progresso_pac == 450:
-                barra = "█" * (progresso_pac // 22)
-                sys.stdout.write(f"\r      ⏳ Progresso: [{barra:<20}] {progresso_pac}/450 pacientes inseridos...")
+            if progresso_pac % 50 == 0 or progresso_pac == PATIENT_COUNT:
+                barra = "█" * max(1, progresso_pac // max(1, PATIENT_COUNT // 20))
+                sys.stdout.write(f"\r      ⏳ Progresso: [{barra:<20}] {progresso_pac}/{PATIENT_COUNT} pacientes inseridos...")
                 sys.stdout.flush()
 
-    print(f"\n      ✔ 450 Pacientes cadastrados com perfis EHR e sincronizados via eventos RabbitMQ.")
+    print(f"\n      ✔ {PATIENT_COUNT} Pacientes cadastrados com perfis EHR e sincronizados via eventos RabbitMQ.")
 
     # ──────────────────────────────────────────────────────────────────────────
     # PASSO 4: Simular Histórico Clínico (Alergias, Vacinas, Uso Contínuo)
     # ──────────────────────────────────────────────────────────────────────────
     print("\n[4/6] Povoando histórico clínico (Alergias, Vacinas e Medicamentos Contínuos)...")
     
-    # Selecionamos os primeiros 120 pacientes para povoar o histórico de saúde
-    amostra_historico = pacientes_cadastrados[:120]
+    # Selecionamos os primeiros 300 pacientes para povoar o histórico de saúde
+    amostra_historico = pacientes_cadastrados[:300]
 
     def povoar_historico_paciente(pac: dict[str, Any]) -> None:
         p_id = pac["patient_id"]
@@ -490,15 +540,15 @@ def main():
     print("      ✔ Registros de prontuário base injetados para pacientes amostrais.")
 
     # ──────────────────────────────────────────────────────────────────────────
-    # PASSO 5: Gerar Agendamentos de Consultas (150 Consultas)
+    # PASSO 5: Gerar Agendamentos de Consultas (300 Consultas)
     # ──────────────────────────────────────────────────────────────────────────
-    print("\n[5/6] Simulando agenda médica e consultas hospitalares (150 agendamentos)...")
+    print("\n[5/6] Simulando agenda médica e consultas hospitalares (300 agendamentos)...")
     
     agendamentos_massa = []
     tipos_consulta = ["CONSULTATION", "RETURN", "EXAM", "URGENT"]
     agora_utc = datetime.now(timezone.utc)
 
-    for a_idx in range(150):
+    for a_idx in range(300):
         pac_escolhido = random.choice(pacientes_cadastrados)
         med_escolhido = random.choice(medicos_cadastrados)
         tipo = random.choice(tipos_consulta)
@@ -509,6 +559,11 @@ def main():
         dt_agendada = (agora_utc + timedelta(days=dias_offset)).replace(hour=hora_c, minute=0, second=0, microsecond=0)
         dt_str = dt_agendada.strftime("%Y-%m-%dT%H:%M:%SZ")
 
+        if dias_offset <= 0:
+            target_status = random.choices(["COMPLETED", "CANCELLED", "SCHEDULED"], weights=[75, 15, 10])[0]
+        else:
+            target_status = random.choices(["SCHEDULED", "CONFIRMED", "CANCELLED"], weights=[40, 50, 10])[0]
+
         agendamentos_massa.append({
             "patient_id": pac_escolhido["user_id"],
             "doctor_id": med_escolhido["id"],
@@ -517,7 +572,8 @@ def main():
             "specialty": med_escolhido.get("specialty", "Clínica Médica"),
             "notes": "Agendamento simulado via seed automático.",
             "passado": (dias_offset <= 0),
-            "doctor_name": med_escolhido["name"]
+            "doctor_name": med_escolhido["name"],
+            "target_status": target_status
         })
 
     consultas_criadas = []
@@ -536,7 +592,8 @@ def main():
                 "id": r["id"],
                 "doctor_id": item["doctor_id"],
                 "patient_id": item["patient_id"],
-                "passado": item["passado"]
+                "passado": item["passado"],
+                "target_status": item["target_status"]
             }
         return None
 
@@ -550,77 +607,77 @@ def main():
     print(f"      ✔ {len(consultas_criadas)} Consultas criadas na base do Clinical Service.")
 
     # ──────────────────────────────────────────────────────────────────────────
-    # PASSO 6: Atender Consultas Passadas e Gerar Prontuários Médicos (60)
+    # PASSO 6: Processar Status das Consultas e Gerar Prontuários Médicos
     # ──────────────────────────────────────────────────────────────────────────
-    print("\n[6/6] Simulando atendimento clínico: Gerando prontuários e prescrições...")
+    print("\n[6/6] Simulando atendimento clínico: Confirmando, Cancelando e Gerando prontuários...")
     
-    consultas_para_atender = [c for c in consultas_criadas if c["passado"]][:60]
-
-    def atender_e_criar_prontuario(cons: dict[str, Any]) -> None:
+    def processar_consulta(cons: dict[str, Any]) -> None:
         c_id = cons["id"]
         doc_id = cons["doctor_id"]
+        target = cons["target_status"]
 
-        queixa = random.choice(QUEIXAS_PRONTUARIOS)
-        med_pres = random.choice(MEDICAMENTOS_COMUM)
+        if target == "CANCELLED":
+            http_request("PUT", f"{clinical_url}/appointments/{c_id}/cancel", body={"reason": "Cancelamento a pedido do paciente (Simulação)"}, token=token)
+            return
+            
+        if target == "CONFIRMED":
+            http_request("PUT", f"{clinical_url}/appointments/{c_id}/confirm", body={}, token=token)
+            return
 
-        # Criar Prontuário Médico (Simulando chamada autenticada pelo próprio Médico ou com token com permissão DOCTOR)
-        # Como no proxy ou verificação do Clinical Service o header X-User-Id ou token sub é verificado,
-        # fazemos a chamada direta simulando o médico
-        headers_med = {"Accept": "application/json", "Authorization": f"Bearer {token}"}
-        body_pront = {
-            "appointment_id": c_id,
-            "chief_complaint": queixa[0],
-            "anamnesis": "Paciente comparece à consulta referindo os sintomas acima. Nega febre no momento.",
-            "physical_exam": "BEG, corado, hidratado, acianótico, anictérico. PA: 120/80 mmHg. FC: 78 bpm.",
-            "diagnosis": f"Hipótese diagnóstica compatível com {queixa[2]}.",
-            "diagnosis_codes": [{"code": queixa[1], "description": queixa[2]}],
-            "treatment_plan": "Orientado repouso e início imediato da medicação prescrita.",
-            "observations": "Retorno agendado se piora clínica."
-        }
+        if target == "COMPLETED":
+            queixa = random.choice(QUEIXAS_PRONTUARIOS)
+            med_pres = random.choice(MEDICAMENTOS_COMUM)
 
-        # Para passar no teste de doctor_id == appt.doctor_id no Clinical Service:
-        # Se via gateway ou serviço requerer o token do médico exato, criamos o payload
-        # No microserviço Clinical Service local, get_current_user decodifica o token admin
-        # Caso o check exija sub == doctor_id, fazemos login do médico:
-        st_p, resp_p = http_request("POST", f"{clinical_url}/records", body=body_pront, token=token)
-        
-        # Se der 403 (médico diferente do logado), fazemos login rápido do médico específico
-        if st_p == 403:
-            # Pegar email do médico na lista
-            doc_email = next((m["email"] for m in equipe_paralela if m.get("tipo")=="MEDICO" and usuarios_existentes.get(m["email"].lower())==doc_id), None)
-            if doc_email:
-                st_l, r_l = http_request("POST", f"{iam_url}/auth/login", body={"email": doc_email, "password": "Password@123"})
-                if st_l == 200 and "access_token" in r_l:
-                    doc_tok = r_l["access_token"]
-                    st_p, resp_p = http_request("POST", f"{clinical_url}/records", body=body_pront, token=doc_tok)
-                    if st_p in (200, 201) and "id" in resp_p:
-                        # Prescrição
-                        http_request("POST", f"{clinical_url}/records/{resp_p['id']}/prescriptions", body={
-                            "medications": [{"name": med_pres[0], "dosage": med_pres[1], "frequency": med_pres[2]}],
-                            "instructions": "Uso contínuo conforme orientação médica."
-                        }, token=doc_tok)
+            # Criar Prontuário Médico (Simulando chamada autenticada pelo próprio Médico ou com token com permissão DOCTOR)
+            body_pront = {
+                "appointment_id": c_id,
+                "chief_complaint": queixa[0],
+                "anamnesis": "Paciente comparece à consulta referindo os sintomas acima. Nega febre no momento.",
+                "physical_exam": "BEG, corado, hidratado, acianótico, anictérico. PA: 120/80 mmHg. FC: 78 bpm.",
+                "diagnosis": f"Hipótese diagnóstica compatível com {queixa[2]}.",
+                "diagnosis_codes": [{"code": queixa[1], "description": queixa[2]}],
+                "treatment_plan": "Orientado repouso e início imediato da medicação prescrita.",
+                "observations": "Retorno agendado se piora clínica."
+            }
+
+            st_p, resp_p = http_request("POST", f"{clinical_url}/records", body=body_pront, token=token)
+            
+            # Se der 403 (médico diferente do logado), fazemos login rápido do médico específico
+            if st_p == 403:
+                doc_email = next((m["email"] for m in medicos_cadastrados if m["id"] == doc_id), None)
+                if doc_email:
+                    st_l, r_l = http_request("POST", f"{iam_url}/auth/login", body={"email": doc_email, "password": "Password@123"})
+                    if st_l == 200 and "access_token" in r_l:
+                        doc_tok = r_l["access_token"]
+                        st_p, resp_p = http_request("POST", f"{clinical_url}/records", body=body_pront, token=doc_tok)
+                        if st_p in (200, 201) and "id" in resp_p:
+                            # Prescrição
+                            http_request("POST", f"{clinical_url}/records/{resp_p['id']}/prescriptions", body={
+                                "medications": [{"name": med_pres[0], "dosage": med_pres[1], "frequency": med_pres[2]}],
+                                "instructions": "Uso contínuo conforme orientação médica."
+                            }, token=doc_tok)
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=args.workers) as executor:
-        list(executor.map(atender_e_criar_prontuario, consultas_para_atender))
+        list(executor.map(processar_consulta, consultas_criadas))
 
-    print("      ✔ Prontuários eletrônicos com CID-10 e prescrições digitais emitidos com sucesso.")
+    print("      ✔ Agendamentos atualizados, prontuários eletrônicos (CID-10) e prescrições digitais emitidos.")
 
     # ─── RESUMO FINAL DE VALIDAÇÃO ────────────────────────────────────────────
     
     # Calcular contagem exata no banco via API
     st_u, r_u = http_request("GET", f"{iam_url}/users?page=1&size=1", token=token)
-    total_db_users = r_u.get("total", 500) if isinstance(r_u, dict) else 500
+    total_db_users = r_u.get("total", TOTAL_USUARIOS) if isinstance(r_u, dict) else TOTAL_USUARIOS
 
     print("\n====================================================================")
     print("                ✔ SEED DO SISTEMA CONCLUÍDO COM SUCESSO!            ")
     print("====================================================================")
     print(f"  • Estatísticas de População Geradas:")
-    print(f"    ├── Administradores : 1  (admin@promptuario.health)")
-    print(f"    ├── Atendentes      : 1  (atendente@promptuario.health)")
-    print(f"    ├── Médicos         : 48 (12 Especialidades Médicas e Agendas)")
-    print(f"    └── Pacientes       : 450 (Perfis Clínicos, CPF e Endereço)")
+    print(f"    ├── Administradores : {ADMIN_COUNT}")
+    print(f"    ├── Atendentes      : {ATTENDANT_COUNT}")
+    print(f"    ├── Médicos         : {DOCTOR_COUNT} (Especialidades Médicas e Agendas)")
+    print(f"    └── Pacientes       : {PATIENT_COUNT} (Perfis Clínicos, CPF e Endereço)")
     print(f"    ────────────────────────────────────────────────────────")
-    print(f"    TOTAL DE USUÁRIOS NO SISTEMA : {total_db_users} / 500")
+    print(f"    TOTAL DE USUÁRIOS NO SISTEMA : {total_db_users} / {TOTAL_USUARIOS}")
     print("====================================================================")
     print("Credenciais de Teste:")
     print("  Admin     : admin@promptuario.health      / Admin@12345")

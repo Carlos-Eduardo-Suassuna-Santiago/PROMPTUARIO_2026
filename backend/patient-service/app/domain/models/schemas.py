@@ -186,6 +186,7 @@ class PatientCreate(BaseModel):
 
 class PatientUpdate(BaseModel):
     full_name: str | None = Field(None, min_length=2, max_length=255)
+    cpf: str | None = Field(None, pattern=r"^\d{3}\.\d{3}\.\d{3}-\d{2}$")
     date_of_birth: date | None = None
     gender: Literal["M", "F", "OTHER"] | None = None
     blood_type: str | None = None

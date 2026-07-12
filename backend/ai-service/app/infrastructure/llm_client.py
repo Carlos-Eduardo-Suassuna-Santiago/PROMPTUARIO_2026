@@ -66,6 +66,8 @@ class LLMClient:
         recovery_timeout: int | None = None,
         cache_ttl: int | None = None,
         request_timeout: int | None = None,
+        api_base_url: str | None = None,
+        json_mode: bool = True,
     ):
         self._api_key = api_key
         self._model = model
@@ -73,6 +75,8 @@ class LLMClient:
         self._temperature = temperature
         self._redis = redis_client
         self._cache_ttl = cache_ttl or settings.LLM_CACHE_TTL_SECONDS
+        self._api_base_url = (api_base_url or settings.LLM_API_BASE_URL).rstrip("/")
+        self._json_mode = json_mode if json_mode else settings.LLM_JSON_MODE
 
         # Circuit breaker state
         self._failure_threshold = failure_threshold or settings.CIRCUIT_BREAKER_FAILURE_THRESHOLD
@@ -205,22 +209,25 @@ class LLMClient:
                     pool=5.0,
                 )
             ) as client:
+                request_body: dict = {
+                    "model": self._model,
+                    "max_tokens": self._max_tokens,
+                    "temperature": self._temperature,
+                    "messages": [
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": prompt},
+                    ],
+                }
+                if self._json_mode:
+                    request_body["response_format"] = {"type": "json_object"}
+
                 response = await client.post(
-                    "https://api.openai.com/v1/chat/completions",
+                    f"{self._api_base_url}/chat/completions",
                     headers={
                         "Authorization": f"Bearer {self._api_key}",
                         "Content-Type": "application/json",
                     },
-                    json={
-                        "model": self._model,
-                        "max_tokens": self._max_tokens,
-                        "temperature": self._temperature,
-                        "response_format": {"type": "json_object"},
-                        "messages": [
-                            {"role": "system", "content": system_prompt},
-                            {"role": "user", "content": prompt},
-                        ],
-                    },
+                    json=request_body,
                 )
                 response.raise_for_status()
                 data = response.json()

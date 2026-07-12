@@ -2,7 +2,7 @@ import { NavLink, useNavigate } from 'react-router-dom'
 import {
   LayoutDashboard, Users, UserRound, Calendar, FileText,
   BarChart3, Brain, Settings, LogOut, ChevronRight,
-  Stethoscope, Shield, Activity,
+  Stethoscope, Shield, Activity, UserCircle,
 } from 'lucide-react'
 import { cn, ROLE_LABELS } from '@/utils'
 import { useAuthStore, useRole } from '@/store/auth.store'
@@ -52,6 +52,12 @@ const NAV_ITEMS: NavItem[] = [
     href: '/reports',
     icon: <BarChart3 className="w-4 h-4" />,
     roles: ['ADMIN', 'DOCTOR'],
+  },
+  {
+    label: 'Meu Perfil',
+    href: '/profile',
+    icon: <UserCircle className="w-4 h-4" />,
+    roles: ['ADMIN', 'DOCTOR', 'ATTENDANT', 'PATIENT'],
   },
   {
     label: 'Usuários',
@@ -135,8 +141,17 @@ export function Sidebar() {
 
       {/* User Section */}
       <div className="border-t border-slate-800/60 p-3 space-y-2">
-        <div className="flex items-center gap-3 px-3 py-2.5 rounded-xl bg-slate-900/60">
-          {/* Avatar */}
+        <NavLink
+          to="/profile"
+          className={({ isActive }) =>
+            cn(
+              'flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-150',
+              isActive
+                ? 'bg-brand-500/15 text-brand-300'
+                : 'text-slate-500 hover:text-slate-300 hover:bg-slate-800/60'
+            )
+          }
+        >
           <div className="w-8 h-8 rounded-full bg-brand-500/20 border border-brand-500/30 flex items-center justify-center flex-shrink-0">
             <span className="text-xs font-bold text-brand-300">
               {user ? initials(user.full_name) : '?'}
@@ -150,7 +165,7 @@ export function Sidebar() {
               {role ? ROLE_LABELS[role] : ''}
             </p>
           </div>
-        </div>
+        </NavLink>
 
         <button
           onClick={handleLogout}

@@ -65,6 +65,12 @@ class UserRepository:
         )
         return (result or 0) > 0
 
+    async def exists_by_cpf(self, cpf: str) -> bool:
+        result = await self.session.scalar(
+            select(func.count()).select_from(User).where(User.cpf == cpf)
+        )
+        return (result or 0) > 0
+
 
 class RefreshTokenRepository:
     def __init__(self, session: AsyncSession):

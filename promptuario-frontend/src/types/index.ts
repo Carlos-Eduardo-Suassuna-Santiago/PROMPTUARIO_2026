@@ -126,6 +126,14 @@ export interface Vaccine {
   created_at: string
 }
 
+export interface VaccineCreate {
+  name: string
+  dose?: string
+  applied_at?: string
+  next_dose_at?: string
+  notes?: string
+}
+
 export interface ContinuousMedication {
   id: string
   patient_id: string
@@ -134,9 +142,13 @@ export interface ContinuousMedication {
   frequency: string
   prescribing_doctor: string | null
   started_at: string | null
+  ended_at: string | null
+  end_reason: string | null
   active: boolean
+  version: number
   notes: string | null
   created_at: string
+  updated_at: string
 }
 
 // ─── Appointments ───────────────────────────────────────────────────────────

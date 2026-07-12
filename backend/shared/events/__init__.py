@@ -45,6 +45,10 @@ class UserCreatedEvent(DomainEvent):
     role: str
     full_name: str
     created_at: datetime = Field(default_factory=_now)
+    cpf: str | None = None
+    date_of_birth: str | None = None
+    gender: str | None = None
+    phone: str | None = None
 
     ROUTING_KEY: ClassVar[str] = "iam.user.created"
     EXCHANGE: ClassVar[str] = "promptuario.iam"

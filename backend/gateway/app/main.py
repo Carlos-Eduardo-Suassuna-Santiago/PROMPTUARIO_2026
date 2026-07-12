@@ -60,6 +60,9 @@ ROUTE_TABLE: list[tuple[str, str, bool]] = [
     # Auth routes — public
     ("/api/v1/auth/login",   settings.IAM_SERVICE_URL,       False),
     ("/api/v1/auth/refresh", settings.IAM_SERVICE_URL,       False),
+    ("/api/v1/auth/forgot-password", settings.IAM_SERVICE_URL, False),
+    ("/api/v1/auth/reset-password",  settings.IAM_SERVICE_URL, False),
+    ("/api/v1/auth/register-patient", settings.IAM_SERVICE_URL, False),
     # OAuth routes — public (callbacks are handled by the provider redirect)
     ("/api/v1/auth/oauth",   settings.IAM_SERVICE_URL,       False),
     # All other routes — require JWT

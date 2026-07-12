@@ -240,7 +240,9 @@ services:
       JWT_SECRET_KEY: ${JWT_SECRET_KEY:-super-secret-change-in-production-32chars}
       JWT_ALGORITHM: HS256
       LLM_API_KEY: ${LLM_API_KEY:-}
-      LLM_MODEL: gpt-4o-mini
+      LLM_API_BASE_URL: ${LLM_API_BASE_URL:-https://api.openai.com/v1}
+      LLM_MODEL: ${LLM_MODEL:-gpt-4o-mini}
+      LLM_JSON_MODE: ${LLM_JSON_MODE:-True}
       SERVICE_NAME: ai-service
       LOG_LEVEL: INFO
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
