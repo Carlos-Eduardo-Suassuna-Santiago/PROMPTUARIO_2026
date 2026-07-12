@@ -472,6 +472,16 @@ class MedicalRecordService:
             change_type="SIGNED",
             snapshot={"signature_hash": record.signature_hash, "signed_at": record.signed_at.isoformat()},
         ))
+        await log_operation(
+            self.repo.session,
+            service="clinical-service",
+            table="medical_records",
+            operation="SIGN",
+            record_id=record_id,
+            user_id=doctor_id,
+            user_role="DOCTOR",
+            new_values={"signature_hash": record.signature_hash[:16]},
+        )
         return record
 
     async def verify_signature(self, record_id: str) -> dict:
@@ -681,6 +691,20 @@ class ExamRequestService:
                 "urgency": exam.urgency,
             },
         ))
+        await log_operation(
+            self.session,
+            service="clinical-service",
+            table="exam_requests",
+            operation="INSERT",
+            record_id=exam.id,
+            user_id=doctor_id,
+            user_role="DOCTOR",
+            new_values={
+                "exam_type": exam.exam_type,
+                "urgency": exam.urgency,
+                "record_id": record_id,
+            },
+        )
         await self.session.commit()
         return exam
 
@@ -713,4 +737,15 @@ class ExamRequestService:
                 "result_date": exam.result_date.isoformat() if exam.result_date else None,
             },
         ))
+        await log_operation(
+            self.session,
+            service="clinical-service",
+            table="exam_requests",
+            operation="UPDATE",
+            record_id=exam.id,
+            user_id=doctor_id,
+            user_role="DOCTOR",
+            old_values={"has_result": bool(old_result)},
+            new_values={"has_result": bool(data.result)},
+        )
         return exam
