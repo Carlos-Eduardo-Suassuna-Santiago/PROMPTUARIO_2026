@@ -29,7 +29,9 @@ GRAFANA[Grafana]
 
 LOKI[Loki]
 
-TEMPO[Tempo]
+JAEGER[Jaeger]
+
+OTEL[OpenTelemetry Collector]
 
 ALERTMANAGER[Alertmanager]
 
@@ -37,13 +39,15 @@ SERVICES --> PROMETHEUS
 
 SERVICES --> LOKI
 
-SERVICES --> TEMPO
+SERVICES --> OTEL
+
+OTEL --> JAEGER
 
 PROMETHEUS --> GRAFANA
 
 LOKI --> GRAFANA
 
-TEMPO --> GRAFANA
+JAEGER --> GRAFANA
 
 PROMETHEUS --> ALERTMANAGER
 ```
@@ -52,13 +56,14 @@ PROMETHEUS --> ALERTMANAGER
 
 # 3. COMPONENTES
 
-| Componente   | Responsabilidade    |
-| ------------ | ------------------- |
-| Prometheus   | Metrics collection  |
-| Grafana      | Dashboards          |
-| Loki         | Log aggregation     |
-| Tempo        | Distributed tracing |
-| Alertmanager | Alert routing       |
+| Componente          | Responsabilidade       |
+| ------------------- | ---------------------- |
+| Prometheus          | Metrics collection     |
+| Grafana             | Dashboards             |
+| Loki                | Log aggregation        |
+| Jaeger              | Distributed tracing    |
+| OpenTelemetry       | Instrumentação e coleta|
+| Alertmanager        | Alert routing          |
 
 ---
 
@@ -325,7 +330,7 @@ async def health_check():
 
 ---
 
-# 13. DISTRIBUTED TRACING
+# 13. DISTRIBUTED TRACING (JAEGER + OPENTELEMETRY)
 
 # Objetivo
 
@@ -338,28 +343,27 @@ Rastrear:
 
 ---
 
-# Arquitetura
+# Arquitetura (Real)
+
+O tracing distribuído é implementado via **OpenTelemetry Collector** + **Jaeger**:
 
 ```mermaid
 sequenceDiagram
 
 participant Frontend
-
 participant Gateway
-
 participant Clinical
-
 participant RabbitMQ
-
 participant AI
 
 Frontend->>Gateway: Request
-
 Gateway->>Clinical: Forward
-
 Clinical->>RabbitMQ: Publish Event
-
 RabbitMQ->>AI: Consume Event
+
+Note over Gateway,AI: OpenTelemetry coleta spans
+Note over Gateway,AI: Envia para OTel Collector (porta 4317)
+Note over Gateway,AI: OTel Collector encaminha para Jaeger
 ```
 
 ---
