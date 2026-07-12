@@ -51,7 +51,7 @@ Esse serviço existe para simplificar o acesso ao sistema. Em vez de o cliente p
 
 - Redis disponível
 - os demais microsserviços em execução (IAM, Patient, Clinical, AI, Reporting)
-- Python 3.11+
+- Python 3.12+
 
 ## Início rápido
 
@@ -67,7 +67,7 @@ uvicorn app.main:app --reload --port 8000
 
 ```bash
 cd backend
-docker-compose up --build gateway
+docker compose up --build gateway
 ```
 
 ## Endpoints principais
