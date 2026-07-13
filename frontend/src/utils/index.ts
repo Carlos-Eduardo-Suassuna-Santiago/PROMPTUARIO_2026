@@ -121,8 +121,13 @@ export function downloadBlob(blob: Blob, filename: string): void {
 // ─── Axios error extractor ─────────────────────────────────────────────────
 export function getErrorMessage(error: unknown): string {
   if (error && typeof error === 'object' && 'response' in error) {
-    const axiosError = error as { response?: { data?: { detail?: string } } }
-    return axiosError.response?.data?.detail ?? 'Erro desconhecido'
+    const axiosError = error as { response?: { data?: { detail?: any } } }
+    const detail = axiosError.response?.data?.detail
+    if (typeof detail === 'string') return detail
+    if (Array.isArray(detail)) {
+      return detail.map(d => d.msg || JSON.stringify(d)).join(', ')
+    }
+    return 'Erro desconhecido'
   }
   return 'Erro ao processar requisição'
 }

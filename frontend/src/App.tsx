@@ -53,6 +53,9 @@ const UserManagementPage = lazy(() =>
 const AuditPage = lazy(() =>
   import('@/pages/admin/AuditPage').then((m) => ({ default: m.AuditPage }))
 )
+const MyHealthPage = lazy(() =>
+  import('@/pages/health/MyHealthPage').then((m) => ({ default: m.MyHealthPage }))
+)
 const ProfilePage = lazy(() =>
   import('@/pages/profile/ProfilePage').then((m) => ({ default: m.ProfilePage }))
 )
@@ -130,6 +133,11 @@ function AppRoutes() {
             <Route element={<RoleGuard allowedRoles={['ADMIN']} />}>
               <Route path="/admin/users" element={<UserManagementPage />} />
               <Route path="/admin/audit" element={<AuditPage />} />
+            </Route>
+
+            {/* PATIENT only */}
+            <Route element={<RoleGuard allowedRoles={['PATIENT']} />}>
+              <Route path="/my-health" element={<MyHealthPage />} />
             </Route>
 
           </Route>

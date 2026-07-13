@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, Query, Request, UploadFile, File, Form, status
+from fastapi import APIRouter, Depends, Query, Request, UploadFile, File, Form, status, HTTPException
 
 from app.config import settings
 from app.domain.models.schemas import (
@@ -143,10 +143,15 @@ async def anonymize_patient(patient_id: str, request: Request):
 @router.get(
     "/{patient_id}/allergies",
     response_model=list[AllergyResponse],
-    dependencies=[Depends(require_roles("ADMIN", "DOCTOR", "ATTENDANT"))],
+    dependencies=[Depends(require_roles("ADMIN", "DOCTOR", "ATTENDANT", "PATIENT"))],
 )
-async def list_allergies(patient_id: str, request: Request):
+async def list_allergies(patient_id: str, request: Request, user=Depends(get_current_user)):
     async with _sf(request)() as session:
+        if user.role == "PATIENT":
+            patient_svc = PatientService(session, _pub(request))
+            patient = await patient_svc.get(patient_id)
+            if patient.user_id != user.sub:
+                raise HTTPException(status_code=403, detail="Acesso negado")
         svc = AllergyService(session, _pub(request))
         return [AllergyResponse.model_validate(a) for a in await svc.list(patient_id)]
 
@@ -155,10 +160,15 @@ async def list_allergies(patient_id: str, request: Request):
     "/{patient_id}/allergies",
     response_model=AllergyResponse,
     status_code=status.HTTP_201_CREATED,
-    dependencies=[Depends(require_roles("ADMIN", "DOCTOR", "ATTENDANT"))],
+    dependencies=[Depends(require_roles("ADMIN", "DOCTOR", "ATTENDANT", "PATIENT"))],
 )
-async def create_allergy(patient_id: str, body: AllergyCreate, request: Request):
+async def create_allergy(patient_id: str, body: AllergyCreate, request: Request, user=Depends(get_current_user)):
     async with _sf(request)() as session:
+        if user.role == "PATIENT":
+            patient_svc = PatientService(session, _pub(request))
+            patient = await patient_svc.get(patient_id)
+            if patient.user_id != user.sub:
+                raise HTTPException(status_code=403, detail="Acesso negado")
         svc = AllergyService(session, _pub(request))
         allergy = await svc.create(patient_id, body)
         allergies_registered_total.labels(service=_settings.SERVICE_NAME).inc()
@@ -168,10 +178,15 @@ async def create_allergy(patient_id: str, body: AllergyCreate, request: Request)
 @router.delete(
     "/{patient_id}/allergies/{allergy_id}",
     status_code=status.HTTP_204_NO_CONTENT,
-    dependencies=[Depends(require_roles("ADMIN", "DOCTOR"))],
+    dependencies=[Depends(require_roles("ADMIN", "DOCTOR", "PATIENT"))],
 )
-async def delete_allergy(patient_id: str, allergy_id: str, request: Request):
+async def delete_allergy(patient_id: str, allergy_id: str, request: Request, user=Depends(get_current_user)):
     async with _sf(request)() as session:
+        if user.role == "PATIENT":
+            patient_svc = PatientService(session, _pub(request))
+            patient = await patient_svc.get(patient_id)
+            if patient.user_id != user.sub:
+                raise HTTPException(status_code=403, detail="Acesso negado")
         svc = AllergyService(session, _pub(request))
         await svc.delete(patient_id, allergy_id)
 
@@ -181,10 +196,15 @@ async def delete_allergy(patient_id: str, allergy_id: str, request: Request):
 @router.get(
     "/{patient_id}/vaccines",
     response_model=list[VaccineResponse],
-    dependencies=[Depends(require_roles("ADMIN", "DOCTOR", "ATTENDANT"))],
+    dependencies=[Depends(require_roles("ADMIN", "DOCTOR", "ATTENDANT", "PATIENT"))],
 )
-async def list_vaccines(patient_id: str, request: Request):
+async def list_vaccines(patient_id: str, request: Request, user=Depends(get_current_user)):
     async with _sf(request)() as session:
+        if user.role == "PATIENT":
+            patient_svc = PatientService(session, _pub(request))
+            patient = await patient_svc.get(patient_id)
+            if patient.user_id != user.sub:
+                raise HTTPException(status_code=403, detail="Acesso negado")
         svc = VaccineService(session, _pub(request))
         return [VaccineResponse.model_validate(v) for v in await svc.list(patient_id)]
 
@@ -219,14 +239,20 @@ async def delete_vaccine(patient_id: str, vaccine_id: str, request: Request):
 @router.get(
     "/{patient_id}/medications",
     response_model=list[MedicationResponse],
-    dependencies=[Depends(require_roles("ADMIN", "DOCTOR", "ATTENDANT"))],
+    dependencies=[Depends(require_roles("ADMIN", "DOCTOR", "ATTENDANT", "PATIENT"))],
 )
 async def list_medications(
     patient_id: str,
     request: Request,
     active_only: bool = Query(False),
+    user=Depends(get_current_user),
 ):
     async with _sf(request)() as session:
+        if user.role == "PATIENT":
+            patient_svc = PatientService(session, _pub(request))
+            patient = await patient_svc.get(patient_id)
+            if patient.user_id != user.sub:
+                raise HTTPException(status_code=403, detail="Acesso negado")
         svc = MedicationService(session, _pub(request))
         return [MedicationResponse.model_validate(m) for m in await svc.list(patient_id, active_only)]
 

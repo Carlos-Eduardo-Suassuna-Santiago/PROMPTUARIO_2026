@@ -46,7 +46,13 @@ function AddMedicationModal({ patientId, open, onClose }: { patientId: string; o
   const onSubmit = async (data: MedicationForm) => {
     setError(null)
     try {
-      await addMedication.mutateAsync({ patientId, data })
+      const payload = {
+        ...data,
+        prescribing_doctor: data.prescribing_doctor || undefined,
+        started_at: data.started_at || undefined,
+        notes: data.notes || undefined,
+      }
+      await addMedication.mutateAsync({ patientId, data: payload })
       reset()
       onClose()
     } catch (err) {
@@ -98,7 +104,14 @@ function AddVaccineModal({ patientId, open, onClose }: { patientId: string; open
   const onSubmit = async (data: VaccineForm) => {
     setError(null)
     try {
-      await addVaccine.mutateAsync({ patientId, data })
+      const payload = {
+        ...data,
+        dose: data.dose || undefined,
+        applied_at: data.applied_at || undefined,
+        next_dose_at: data.next_dose_at || undefined,
+        notes: data.notes || undefined,
+      }
+      await addVaccine.mutateAsync({ patientId, data: payload })
       reset()
       onClose()
     } catch (err) {
@@ -149,7 +162,12 @@ function AddAllergyModal({ patientId, open, onClose }: { patientId: string; open
   const onSubmit = async (data: AllergyForm) => {
     setError(null)
     try {
-      await addAllergy.mutateAsync({ patientId, data })
+      const payload = {
+        ...data,
+        reaction_type: data.reaction_type || undefined,
+        notes: data.notes || undefined,
+      }
+      await addAllergy.mutateAsync({ patientId, data: payload })
       reset()
       onClose()
     } catch (err) {
