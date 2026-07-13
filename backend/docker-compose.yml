@@ -1,4 +1,3 @@
-
 services:
   # ─── DATABASES ────────────────────────────────────────────────
   db-iam:
@@ -10,11 +9,11 @@ services:
     volumes:
       - iam_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U iam -d iam_db"]
+      test: [ "CMD-SHELL", "pg_isready -U iam -d iam_db" ]
       interval: 5s
       timeout: 5s
       retries: 5
-    networks: [backend]
+    networks: [ backend ]
 
   db-patient:
     image: postgres:15-alpine
@@ -25,11 +24,11 @@ services:
     volumes:
       - patient_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U patient -d patient_db"]
+      test: [ "CMD-SHELL", "pg_isready -U patient -d patient_db" ]
       interval: 5s
       timeout: 5s
       retries: 5
-    networks: [backend]
+    networks: [ backend ]
 
   db-clinical:
     image: postgres:15-alpine
@@ -40,11 +39,11 @@ services:
     volumes:
       - clinical_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U clinical -d clinical_db"]
+      test: [ "CMD-SHELL", "pg_isready -U clinical -d clinical_db" ]
       interval: 5s
       timeout: 5s
       retries: 5
-    networks: [backend]
+    networks: [ backend ]
 
   db-reporting:
     image: postgres:15-alpine
@@ -55,11 +54,11 @@ services:
     volumes:
       - reporting_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U reporting -d reporting_db"]
+      test: [ "CMD-SHELL", "pg_isready -U reporting -d reporting_db" ]
       interval: 5s
       timeout: 5s
       retries: 5
-    networks: [backend]
+    networks: [ backend ]
 
   db-ai:
     image: mongo:7
@@ -70,11 +69,11 @@ services:
     volumes:
       - ai_data:/data/db
     healthcheck:
-      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      test: [ "CMD", "mongosh", "--eval", "db.adminCommand('ping')" ]
       interval: 10s
       timeout: 5s
       retries: 5
-    networks: [backend]
+    networks: [ backend ]
 
   # ─── INFRASTRUCTURE ───────────────────────────────────────────
   redis:
@@ -83,11 +82,11 @@ services:
     volumes:
       - redis_data:/data
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: [ "CMD", "redis-cli", "ping" ]
       interval: 5s
       timeout: 3s
       retries: 5
-    networks: [backend]
+    networks: [ backend ]
     ports:
       - "6379:6379"
 
@@ -99,11 +98,11 @@ services:
     volumes:
       - rabbitmq_data:/var/lib/rabbitmq
     healthcheck:
-      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      test: [ "CMD", "rabbitmq-diagnostics", "ping" ]
       interval: 10s
       timeout: 5s
       retries: 10
-    networks: [backend]
+    networks: [ backend ]
     ports:
       - "5672:5672"
       - "15672:15672"
@@ -117,11 +116,11 @@ services:
     volumes:
       - minio_data:/data
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      test: [ "CMD", "curl", "-f", "http://localhost:9000/minio/health/live" ]
       interval: 10s
       timeout: 5s
       retries: 5
-    networks: [backend]
+    networks: [ backend ]
     ports:
       - "9000:9000"
       - "9001:9001"
@@ -153,7 +152,7 @@ services:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
-    networks: [backend]
+    networks: [ backend ]
     ports:
       - "8001:8000"
 
@@ -174,7 +173,7 @@ services:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
-    networks: [backend]
+    networks: [ backend ]
     ports:
       - "8002:8000"
 
@@ -203,7 +202,7 @@ services:
         condition: service_healthy
       minio:
         condition: service_healthy
-    networks: [backend]
+    networks: [ backend ]
     ports:
       - "8003:8000"
 
@@ -226,7 +225,7 @@ services:
         condition: service_healthy
       minio:
         condition: service_healthy
-    networks: [backend]
+    networks: [ backend ]
     restart: unless-stopped
 
   ai-service:
@@ -251,7 +250,7 @@ services:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
-    networks: [backend]
+    networks: [ backend ]
     ports:
       - "8004:8000"
 
@@ -283,7 +282,7 @@ services:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
-    networks: [backend]
+    networks: [ backend ]
     ports:
       - "8005:8000"
 
@@ -305,7 +304,7 @@ services:
       - reporting-service
       - db-reporting
       - redis
-    networks: [backend]
+    networks: [ backend ]
 
   reporting-beat:
     build:
@@ -316,13 +315,12 @@ services:
       CELERY_BROKER_URL: redis://redis:6379/1
       CELERY_RESULT_BACKEND: redis://redis:6379/1
       CELERY_BEAT_SCHEDULE_FILENAME: /tmp/celerybeat-schedule
-    command: ["celery", "-A", "app.workers.celery_tasks.celery_app", "beat",
-              "--loglevel=info", "--schedule=/tmp/celerybeat-schedule"]
+    command: [ "celery", "-A", "app.workers.celery_tasks.celery_app", "beat", "--loglevel=info", "--schedule=/tmp/celerybeat-schedule" ]
     depends_on:
       - reporting-service
       - db-reporting
       - redis
-    networks: [backend]
+    networks: [ backend ]
 
   # ─── API GATEWAY ──────────────────────────────────────────────
   gateway:
@@ -346,9 +344,9 @@ services:
       - clinical-service
       - ai-service
       - reporting-service
-    networks: [backend]
+    networks: [ backend ]
     ports:
-      - "80:8000"
+      - "8000:8000"
 
   # ─── EXPORTERS ──────────────────────────────────────────────
   # RabbitMQ natively exposes Prometheus metrics on port 15692
@@ -389,7 +387,7 @@ services:
       - "--storage.tsdb.retention.time=30d"
     ports:
       - "9090:9090"
-    networks: [backend]
+    networks: [ backend ]
     restart: unless-stopped
 
   grafana:
@@ -403,8 +401,8 @@ services:
       GF_USERS_ALLOW_SIGN_UP: "false"
     ports:
       - "3001:3000"
-    depends_on: [prometheus]
-    networks: [backend]
+    depends_on: [ prometheus ]
+    networks: [ backend ]
     restart: unless-stopped
 
   jaeger:
@@ -414,7 +412,7 @@ services:
     ports:
       - "16686:16686"
       - "14250:14250"
-    networks: [backend]
+    networks: [ backend ]
     restart: unless-stopped
 
   otel-collector:
@@ -424,8 +422,8 @@ services:
     ports:
       - "4317:4317"
       - "4318:4318"
-    depends_on: [jaeger]
-    networks: [backend]
+    depends_on: [ jaeger ]
+    networks: [ backend ]
     restart: unless-stopped
 
   # ─── BACKUP SERVICE ────────────────────────────────────────────
@@ -458,7 +456,7 @@ services:
         condition: service_healthy
       minio:
         condition: service_healthy
-    networks: [backend]
+    networks: [ backend ]
     restart: unless-stopped
 
 networks:
