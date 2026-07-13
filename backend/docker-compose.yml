@@ -348,7 +348,7 @@ services:
       - reporting-service
     networks: [backend]
     ports:
-      - "8000:8000"
+      - "80:8000"
 
   # ─── EXPORTERS ──────────────────────────────────────────────
   # RabbitMQ natively exposes Prometheus metrics on port 15692

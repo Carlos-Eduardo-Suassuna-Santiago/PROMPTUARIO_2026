@@ -1,18 +1,13 @@
 name: Deploy
 
 on:
-  workflow_run:
-    workflows:
-      - "Docker Build & Publish"
-    types:
-      - completed
+  push:
     branches:
       - main
 
 jobs:
   deploy-backend:
     runs-on: ubuntu-latest
-    if: ${{ github.event.workflow_run.conclusion == 'success' }}
     steps:
       - name: Deploy Backend via SSH
         uses: appleboy/ssh-action@v1
@@ -21,21 +16,10 @@ jobs:
           username: ${{ secrets.SERVER_USER_BACKEND }}
           key: ${{ secrets.SERVER_SSH_KEY_BACKEND }}
           script: |
-            cd medical-platform-backend
-            docker compose pull
-            docker compose up -d
-
-  deploy-frontend:
-    runs-on: ubuntu-latest
-    if: ${{ github.event.workflow_run.conclusion == 'success' }}
-    steps:
-      - name: Deploy Frontend via SSH
-        uses: appleboy/ssh-action@v1
-        with:
-          host: ${{ secrets.SERVER_HOST_FRONTEND }}
-          username: ${{ secrets.SERVER_USER_FRONTEND }}
-          key: ${{ secrets.SERVER_SSH_KEY_FRONTEND }}
-          script: |
-            cd medical-platform-frontend
-            docker compose pull
-            docker compose up -d
+            # Entra na pasta do projeto e atualiza o código
+            cd PROMPTUARIO_2026
+            git pull origin main
+            
+            # Entra na pasta do backend e reconstrói as imagens
+            cd backend
+            docker compose up --build -d
