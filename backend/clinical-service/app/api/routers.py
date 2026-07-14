@@ -74,11 +74,11 @@ async def list_appointments(
             from app.domain.models.clinical import PatientProjection
             from sqlalchemy import select
             res = await session.execute(
-                select(PatientProjection.user_id, PatientProjection.full_name)
-                .where(PatientProjection.user_id.in_(p_ids))
+                select(PatientProjection.id, PatientProjection.full_name)
+                .where(PatientProjection.id.in_(p_ids))
             )
             for row in res.all():
-                p_names[row.user_id] = row.full_name
+                p_names[row.id] = row.full_name
                 
         response_items = []
         for a in items:
