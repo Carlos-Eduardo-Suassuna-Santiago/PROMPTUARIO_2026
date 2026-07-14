@@ -197,6 +197,7 @@ function RecordCard({ record }: { record: MedicalRecord }) {
           <div>
             <p className="text-sm font-semibold text-slate-200 line-clamp-1">{record.chief_complaint}</p>
             <p className="text-xs text-slate-500 mt-0.5">{formatDateTime(record.created_at)}</p>
+            <p className="text-[10px] text-slate-600 mt-0.5 font-mono">ID: {record.id}</p>
           </div>
         </div>
         <div className="flex items-center gap-2 flex-shrink-0">
@@ -268,10 +269,13 @@ function RecordDetailView({ recordId }: { recordId: string }) {
       <Card>
         <CardHeader>
           <div className="flex items-center justify-between">
-            <h3 className="text-sm font-semibold text-slate-200 flex items-center gap-2">
-              <Stethoscope className="w-4 h-4 text-brand-400" />
-              Prontuário — {formatDate(record.created_at)}
-            </h3>
+            <div>
+              <h3 className="text-sm font-semibold text-slate-200 flex items-center gap-2">
+                <Stethoscope className="w-4 h-4 text-brand-400" />
+                Prontuário — {formatDate(record.created_at)}
+              </h3>
+              <span className="text-xs text-slate-500 mt-1 block">ID: {record.id}</span>
+            </div>
             {isDoctor && (
               <div className="flex gap-2">
                 <Button

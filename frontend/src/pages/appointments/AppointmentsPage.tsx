@@ -412,6 +412,7 @@ function AppointmentRow({
 export function AppointmentsPage() {
   const [page, setPage] = useState(1)
   const [statusFilter, setStatusFilter] = useState('')
+  const [patientNameFilter, setPatientNameFilter] = useState('')
   const [createOpen, setCreateOpen] = useState(false)
   const [cancelTarget, setCancelTarget] = useState<Appointment | null>(null)
   const [detailsTarget, setDetailsTarget] = useState<Appointment | null>(null)
@@ -426,6 +427,7 @@ export function AppointmentsPage() {
     page,
     size: 20,
     status: statusFilter || undefined,
+    patient_name: patientNameFilter || undefined,
   })
 
   const handleConfirm = async (appt: Appointment) => {
@@ -474,6 +476,17 @@ export function AppointmentsPage() {
                 </button>
               ))}
             </div>
+          </div>
+          
+          <div className="mt-4 flex max-w-sm">
+            <Input
+              placeholder="Pesquisar por paciente..."
+              value={patientNameFilter}
+              onChange={(e) => {
+                setPatientNameFilter(e.target.value)
+                setPage(1)
+              }}
+            />
           </div>
         </CardHeader>
 

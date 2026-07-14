@@ -270,6 +270,7 @@ export function PatientDetailPage() {
             <InfoRow label="Data de Nascimento" value={formatDate(patient.date_of_birth)} />
             <InfoRow label="Gênero" value={patient.gender === 'M' ? 'Masculino' : patient.gender === 'F' ? 'Feminino' : patient.gender ?? undefined} />
             <InfoRow label="Tipo Sanguíneo" value={patient.blood_type} />
+            <InfoRow label="ID (Identificador)" value={patient.id} className="col-span-2 sm:col-span-4" />
           </div>
           <div className="flex gap-2">
             {allergies && allergies.length > 0 && (

@@ -54,6 +54,7 @@ async def list_appointments(
     appt_status: Optional[str] = Query(None, alias="status"),
     from_date: Optional[date] = Query(None),
     to_date: Optional[date] = Query(None),
+    patient_name: Optional[str] = Query(None),
 ):
     # Restrict patients to their own appointments
     if user.role == "PATIENT":
@@ -63,7 +64,7 @@ async def list_appointments(
 
     async with _sf(request)() as session:
         svc = AppointmentService(session, _pub(request))
-        items, total = await svc.list_appointments(page, size, patient_id, doctor_id, appt_status, from_date, to_date)
+        items, total = await svc.list_appointments(page, size, patient_id, doctor_id, appt_status, from_date, to_date, patient_name)
         return AppointmentListResponse(
             items=[AppointmentResponse.model_validate(a) for a in items],
             total=total, page=page, size=size,

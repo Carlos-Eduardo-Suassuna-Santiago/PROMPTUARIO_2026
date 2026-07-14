@@ -33,10 +33,18 @@ class AppointmentRepository:
         status: str | None = None,
         from_date: date | None = None,
         to_date: date | None = None,
+        patient_name: str | None = None,
     ) -> tuple[list[Appointment], int]:
         q = select(Appointment)
         cq = select(func.count()).select_from(Appointment)
+        
+        if patient_name:
+            q = q.join(PatientProjection, Appointment.patient_id == PatientProjection.user_id)
+            cq = cq.join(PatientProjection, Appointment.patient_id == PatientProjection.user_id)
+            
         filters = []
+        if patient_name:
+            filters.append(PatientProjection.full_name.ilike(f"%{patient_name}%"))
         if patient_id:
             filters.append(Appointment.patient_id == patient_id)
         if doctor_id:
@@ -52,7 +60,7 @@ class AppointmentRepository:
             cq = cq.where(and_(*filters))
         total = await self.session.scalar(cq) or 0
         result = await self.session.execute(
-            q.order_by(Appointment.scheduled_at.desc())
+            q.order_by(Appointment.scheduled_at.asc())
             .offset((page - 1) * size).limit(size)
         )
         return list(result.scalars().all()), total

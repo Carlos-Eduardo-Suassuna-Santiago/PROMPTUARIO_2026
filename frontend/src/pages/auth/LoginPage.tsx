@@ -46,8 +46,8 @@ export function LoginPage() {
   } = useForm<FormValues>({
     resolver: zodResolver(schema),
     defaultValues: {
-      email: 'admin@promptuario.health',
-      password: 'Admin@12345',
+      email: '',
+      password: '',
     },
   })
 
