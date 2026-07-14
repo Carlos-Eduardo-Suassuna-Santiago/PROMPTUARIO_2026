@@ -4,7 +4,7 @@ import type {
   Patient, PatientCreate, PatientSummary, Allergy, AllergyCreate,
   Vaccine, ContinuousMedication,
   Appointment, AppointmentCreate,
-  MedicalRecord, MedicalRecordCreate, Prescription, ExamRequest,
+  MedicalRecord, MedicalRecordCreate, Prescription, ExamRequest, MedicalCertificate,
   AnalysisJob, AnalysisType,
   ReportJob, ReportType, OutputFormat, DashboardSummary,
 } from '@/types'
@@ -233,48 +233,6 @@ export const reportsApi = {
 }
 
 // ─── Audit ──────────────────────────────────────────────────────────────────
-
-export interface MedicalCertificate {
-  id: string
-  record_id: string
-  patient_id: string
-  doctor_id: string
-  reason: string
-  days_off: number
-  start_date: string
-  notes?: string
-  pdf_s3_key?: string
-  pdf_generated_at?: string
-  signature_hash?: string
-  signed_by?: string
-  signed_at?: string
-  created_at: string
-}
-
-export interface MedicalRecord {
-  id: string
-  appointment_id: string
-  patient_id: string
-  doctor_id: string
-  chief_complaint: string
-  anamnesis?: string
-  physical_exam?: string
-  diagnosis?: string
-  diagnosis_codes: string[]
-  treatment_plan?: string
-  observations?: string
-  rich_notes?: Record<string, unknown>
-  signature_hash?: string
-  signed_by?: string
-  signed_at?: string
-  ai_analysis_id?: string
-  prescriptions: Prescription[]
-  exam_requests: ExamRequest[]
-  certificates: MedicalCertificate[]
-  history: RecordHistory[]
-  created_at: string
-  updated_at: string
-}
 
 export const auditApi = {
   logs: (params?: {

@@ -5,13 +5,9 @@ import * as z from 'zod'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { Plus } from 'lucide-react'
 
-import { Modal } from '@/components/ui/modal'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Textarea } from '@/components/ui/textarea'
-import { Alert } from '@/components/ui/alert'
+import { Modal, Button, Input, Textarea, Alert } from '@/components/ui'
 import { recordsApi } from '@/api/services'
-import { getErrorMessage } from '@/lib/utils'
+import { getErrorMessage } from '@/utils'
 
 const prescriptionSchema = z.object({
   medications: z.array(z.object({

@@ -4,13 +4,9 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import * as z from 'zod'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 
-import { Modal } from '@/components/ui/modal'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Textarea } from '@/components/ui/textarea'
-import { Alert } from '@/components/ui/alert'
+import { Modal, Button, Input, Textarea, Alert } from '@/components/ui'
 import { recordsApi } from '@/api/services'
-import { getErrorMessage } from '@/lib/utils'
+import { getErrorMessage } from '@/utils'
 
 const certificateSchema = z.object({
   reason: z.string().min(5, 'O motivo deve ter pelo menos 5 caracteres'),

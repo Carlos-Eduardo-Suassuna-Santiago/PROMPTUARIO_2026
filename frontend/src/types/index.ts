@@ -182,6 +182,32 @@ export interface AppointmentCreate {
 
 // ─── Medical Records ────────────────────────────────────────────────────────
 
+export interface RecordHistory {
+  id: string
+  record_id: string
+  changed_by: string
+  change_type: string
+  snapshot: Record<string, unknown>
+  created_at: string
+}
+
+export interface MedicalCertificate {
+  id: string
+  record_id: string
+  patient_id: string
+  doctor_id: string
+  reason: string
+  days_off: number
+  start_date: string
+  notes?: string
+  pdf_s3_key?: string
+  pdf_generated_at?: string
+  signature_hash?: string
+  signed_by?: string
+  signed_at?: string
+  created_at: string
+}
+
 export interface MedicalRecord {
   id: string
   appointment_id: string
@@ -194,9 +220,15 @@ export interface MedicalRecord {
   diagnosis_codes: string[]
   treatment_plan: string | null
   observations: string | null
+  rich_notes?: Record<string, unknown>
+  signature_hash?: string
+  signed_by?: string
+  signed_at?: string
   ai_analysis_id: string | null
   prescriptions: Prescription[]
   exam_requests: ExamRequest[]
+  certificates: MedicalCertificate[]
+  history: RecordHistory[]
   created_at: string
   updated_at: string
 }
