@@ -355,7 +355,7 @@ function RecordDetailView({ recordId }: { recordId: string }) {
                       try {
                         const response = await recordsApi.downloadPrescription(record.id, rx.id)
                         if (response.download_url) {
-                          window.open(response.download_url, '_blank')
+                          window.location.href = response.download_url
                         }
                       } catch (err) {
                         const msg = getErrorMessage(err)

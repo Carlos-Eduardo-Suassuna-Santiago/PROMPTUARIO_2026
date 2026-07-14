@@ -706,7 +706,7 @@ export function PatientDetailPage() {
                               ? await recordsApi.downloadPrescription(doc.record_id, doc.id)
                               : await recordsApi.downloadCertificate(doc.record_id, doc.id)
                             if (res.download_url) {
-                              window.open(res.download_url, '_blank')
+                              window.location.href = res.download_url
                             }
                           } catch (err) {
                             alert(getErrorMessage(err))

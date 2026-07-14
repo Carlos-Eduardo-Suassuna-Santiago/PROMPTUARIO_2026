@@ -426,7 +426,7 @@ async def download_prescription_pdf(
     )
     url = s3.generate_presigned_url(
         "get_object",
-        Params={"Bucket": _settings.S3_BUCKET_PRESCRIPTIONS, "Key": rx.pdf_s3_key},
+        Params={"Bucket": _settings.S3_BUCKET_PRESCRIPTIONS, "Key": rx.pdf_s3_key, "ResponseContentDisposition": f'attachment; filename="prescricao-{rx.id[:8]}.pdf"'},
         ExpiresIn=300,
     )
     if "http://minio:9000" in url:
@@ -492,7 +492,7 @@ async def download_certificate_pdf(
     )
     url = s3.generate_presigned_url(
         "get_object",
-        Params={"Bucket": _settings.S3_BUCKET_PRESCRIPTIONS, "Key": cert.pdf_s3_key},
+        Params={"Bucket": _settings.S3_BUCKET_PRESCRIPTIONS, "Key": cert.pdf_s3_key, "ResponseContentDisposition": f'attachment; filename="atestado-{cert.id[:8]}.pdf"'},
         ExpiresIn=300,
     )
     if "http://minio:9000" in url:
