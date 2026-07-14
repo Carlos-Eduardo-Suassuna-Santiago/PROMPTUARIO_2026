@@ -201,12 +201,12 @@ function RecordCard({ record }: { record: MedicalRecord }) {
           </div>
         </div>
         <div className="flex items-center gap-2 flex-shrink-0">
-          {record.prescriptions.length > 0 && (
+          {record.prescriptions?.length > 0 && (
             <Badge className="bg-violet-500/15 text-violet-300 ring-violet-500/20">
               {record.prescriptions.length} Rx
             </Badge>
           )}
-          {record.exam_requests.length > 0 && (
+          {record.exam_requests?.length > 0 && (
             <Badge className="bg-sky-500/15 text-sky-300 ring-sky-500/20">
               {record.exam_requests.length} exames
             </Badge>
@@ -314,11 +314,11 @@ function RecordDetailView({ recordId }: { recordId: string }) {
               </div>
             ) : null)}
 
-            {record.diagnosis_codes.length > 0 && (
+            {record.diagnosis_codes?.length > 0 && (
               <div className="space-y-1">
                 <dt className="text-xs font-medium text-slate-500 uppercase tracking-wider">CID-10</dt>
                 <dd className="flex flex-wrap gap-1.5">
-                  {record.diagnosis_codes.map((code) => (
+                  {record.diagnosis_codes?.map((code) => (
                     <Badge key={code} className="bg-slate-700/60 text-slate-300 ring-slate-600/30 font-mono">
                       {code}
                     </Badge>
@@ -331,16 +331,16 @@ function RecordDetailView({ recordId }: { recordId: string }) {
       </Card>
 
       {/* Prescriptions */}
-      {record.prescriptions.length > 0 && (
+      {record.prescriptions?.length > 0 && (
         <Card>
           <CardHeader>
             <h3 className="text-sm font-semibold text-slate-200 flex items-center gap-2">
               <Pill className="w-4 h-4 text-violet-400" />
-              Prescrições ({record.prescriptions.length})
+              Prescrições ({record.prescriptions?.length})
             </h3>
           </CardHeader>
           <CardBody className="space-y-4">
-            {record.prescriptions.map((rx) => (
+            {record.prescriptions?.map((rx) => (
               <div key={rx.id} className="p-4 bg-slate-950/60 rounded-xl border border-slate-800/60">
                 <div className="flex items-center justify-between mb-3">
                   <span className="text-xs text-slate-500">{formatDate(rx.created_at)} · Válida por {rx.valid_days} dias</span>
@@ -395,12 +395,12 @@ function RecordDetailView({ recordId }: { recordId: string }) {
       )}
 
       {/* Exam requests */}
-      {record.exam_requests.length > 0 && (
+      {record.exam_requests?.length > 0 && (
         <Card>
           <CardHeader>
             <h3 className="text-sm font-semibold text-slate-200 flex items-center gap-2">
               <FlaskConical className="w-4 h-4 text-sky-400" />
-              Solicitações de Exame ({record.exam_requests.length})
+              Solicitações de Exame ({record.exam_requests?.length})
             </h3>
           </CardHeader>
           <Table>
@@ -413,7 +413,7 @@ function RecordDetailView({ recordId }: { recordId: string }) {
               </tr>
             </thead>
             <tbody>
-              {record.exam_requests.map((exam) => (
+              {record.exam_requests?.map((exam) => (
                 <tr key={exam.id} className="hover:bg-slate-800/20 transition-colors">
                   <Td className="font-medium text-slate-200">{exam.exam_type}</Td>
                   <Td>
