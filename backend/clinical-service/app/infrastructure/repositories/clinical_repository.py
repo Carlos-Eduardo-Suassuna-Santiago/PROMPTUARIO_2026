@@ -60,7 +60,7 @@ class AppointmentRepository:
             cq = cq.where(and_(*filters))
         total = await self.session.scalar(cq) or 0
         result = await self.session.execute(
-            q.order_by(Appointment.scheduled_at.asc())
+            q.order_by(Appointment.scheduled_at.desc())
             .offset((page - 1) * size).limit(size)
         )
         return list(result.scalars().all()), total
