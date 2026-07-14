@@ -705,11 +705,9 @@ export function PatientDetailPage() {
                             const res = doc.doc_type === 'PRESCRIPTION' 
                               ? await recordsApi.downloadPrescription(doc.record_id, doc.id)
                               : await recordsApi.downloadCertificate(doc.record_id, doc.id)
-                            const url = window.URL.createObjectURL(new Blob([res as any]))
-                            const a = document.createElement('a')
-                            a.href = url
-                            a.download = `${doc.doc_type === 'PRESCRIPTION' ? 'receita' : 'atestado'}_${doc.id}.pdf`
-                            a.click()
+                            if (res.download_url) {
+                              window.open(res.download_url, '_blank')
+                            }
                           } catch (err) {
                             alert(getErrorMessage(err))
                           }

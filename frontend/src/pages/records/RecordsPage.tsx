@@ -354,16 +354,9 @@ function RecordDetailView({ recordId }: { recordId: string }) {
                     onClick={async () => {
                       try {
                         const response = await recordsApi.downloadPrescription(record.id, rx.id)
-                        const contentType = typeof response.headers['content-type'] === 'string'
-                          ? response.headers['content-type']
-                          : 'application/pdf'
-                        const blob = new Blob([response.data], { type: contentType })
-                        const url = window.URL.createObjectURL(blob)
-                        const a = document.createElement('a')
-                        a.href = url
-                        a.download = `prescricao-${rx.id.slice(0, 8)}.pdf`
-                        a.click()
-                        window.URL.revokeObjectURL(url)
+                        if (response.download_url) {
+                          window.open(response.download_url, '_blank')
+                        }
                       } catch (err) {
                         const msg = getErrorMessage(err)
                         if (msg.includes('202') || msg.includes('gerado')) {

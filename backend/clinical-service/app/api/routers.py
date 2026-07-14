@@ -433,7 +433,7 @@ async def download_prescription_pdf(
         url = url.replace("http://minio:9000", _settings.S3_PUBLIC_ENDPOINT)
     elif _settings.S3_ENDPOINT in url and hasattr(_settings, "S3_PUBLIC_ENDPOINT") and _settings.S3_PUBLIC_ENDPOINT:
         url = url.replace(_settings.S3_ENDPOINT, _settings.S3_PUBLIC_ENDPOINT)
-    return RedirectResponse(url=url, status_code=302)
+    return {"download_url": url, "expires_in_seconds": 300}
 
 
 # ─── Certificates ─────────────────────────────────────────────────────────────
@@ -499,7 +499,7 @@ async def download_certificate_pdf(
         url = url.replace("http://minio:9000", _settings.S3_PUBLIC_ENDPOINT)
     elif _settings.S3_ENDPOINT in url and hasattr(_settings, "S3_PUBLIC_ENDPOINT") and _settings.S3_PUBLIC_ENDPOINT:
         url = url.replace(_settings.S3_ENDPOINT, _settings.S3_PUBLIC_ENDPOINT)
-    return RedirectResponse(url=url, status_code=302)
+    return {"download_url": url, "expires_in_seconds": 300}
 
 
 # ─── Exam Requests ────────────────────────────────────────────────────────────

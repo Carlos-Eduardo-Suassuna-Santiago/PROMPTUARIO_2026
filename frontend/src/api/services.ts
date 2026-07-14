@@ -177,18 +177,14 @@ export const recordsApi = {
   }) => api.post<Prescription>(`/records/${recordId}/prescriptions`, data).then(r => r.data),
 
   downloadPrescription: (recordId: string, prescriptionId: string) =>
-    api.get(`/records/${recordId}/prescriptions/${prescriptionId}/pdf`, {
-      responseType: 'blob',
-    }),
+    api.get<{ download_url: string }>(`/records/${recordId}/prescriptions/${prescriptionId}/pdf`).then(r => r.data),
 
   // Certificates
   createCertificate: (recordId: string, data: { reason: string; days_off: number; start_date: string; notes?: string }) =>
     api.post<MedicalCertificate>(`/records/${recordId}/certificates`, data).then(r => r.data),
 
   downloadCertificate: (recordId: string, certificateId: string) =>
-    api.get(`/records/${recordId}/certificates/${certificateId}/pdf`, {
-      responseType: 'blob',
-    }),
+    api.get<{ download_url: string }>(`/records/${recordId}/certificates/${certificateId}/pdf`).then(r => r.data),
 
   // Exams
   createExam: (recordId: string, data: { exam_type: string; urgency: string; instructions?: string }) =>
