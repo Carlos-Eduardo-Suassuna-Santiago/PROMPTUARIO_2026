@@ -10,7 +10,7 @@ import {
 } from '@/hooks'
 import { PageHeader } from '@/components/layout/AppShell'
 import {
-  Card, CardHeader, CardBody, Button, Input, Select, Modal,
+  Card, CardHeader, CardBody, Button, Input, Textarea, Select, Modal,
   Table, Th, Td, Badge, PageLoader, EmptyState, Pagination,
   Alert, Spinner,
 } from '@/components/ui'
@@ -197,6 +197,11 @@ function ConsultationDetailsModal({
   const createRecord = useCreateRecord()
   const [isCreating, setIsCreating] = useState(false)
   const [complaint, setComplaint] = useState('')
+  const [anamnesis, setAnamnesis] = useState('')
+  const [physicalExam, setPhysicalExam] = useState('')
+  const [diagnosis, setDiagnosis] = useState('')
+  const [treatmentPlan, setTreatmentPlan] = useState('')
+  const [observations, setObservations] = useState('')
   const [error, setError] = useState<string | null>(null)
 
   if (!appointment) return null
@@ -211,6 +216,11 @@ function ConsultationDetailsModal({
       const rec = await createRecord.mutateAsync({
         appointment_id: appointment.id,
         chief_complaint: complaint,
+        anamnesis: anamnesis || undefined,
+        physical_exam: physicalExam || undefined,
+        diagnosis: diagnosis || undefined,
+        treatment_plan: treatmentPlan || undefined,
+        observations: observations || undefined,
       })
       onClose()
       navigate(`/records/${rec.id}`)
@@ -222,7 +232,16 @@ function ConsultationDetailsModal({
   return (
     <Modal
       open={open}
-      onClose={() => { setIsCreating(false); setComplaint(''); onClose(); }}
+      onClose={() => { 
+        setIsCreating(false); 
+        setComplaint(''); 
+        setAnamnesis('');
+        setPhysicalExam('');
+        setDiagnosis('');
+        setTreatmentPlan('');
+        setObservations('');
+        onClose(); 
+      }}
       title="Detalhes da Consulta"
       size="lg"
       footer={
@@ -267,7 +286,7 @@ function ConsultationDetailsModal({
         </div>
 
         {isCreating && (
-          <div className="pt-4 border-t border-slate-800 space-y-4 animate-in fade-in slide-in-from-top-4">
+          <div className="pt-4 border-t border-slate-800 space-y-4 animate-in fade-in slide-in-from-top-4 max-h-[60vh] overflow-y-auto pr-2 custom-scrollbar">
             <h4 className="font-semibold text-slate-200">Novo Prontuário</h4>
             <Input
               label="Queixa Principal *"
@@ -275,7 +294,38 @@ function ConsultationDetailsModal({
               value={complaint}
               onChange={(e) => setComplaint(e.target.value)}
             />
-            <div className="flex justify-end gap-2">
+            <Textarea
+              label="Anamnese"
+              placeholder="Histórico da doença atual..."
+              value={anamnesis}
+              onChange={(e) => setAnamnesis(e.target.value)}
+              rows={2}
+            />
+            <Textarea
+              label="Exame Físico"
+              value={physicalExam}
+              onChange={(e) => setPhysicalExam(e.target.value)}
+              rows={2}
+            />
+            <Textarea
+              label="Hipótese Diagnóstica / CID"
+              value={diagnosis}
+              onChange={(e) => setDiagnosis(e.target.value)}
+              rows={2}
+            />
+            <Textarea
+              label="Conduta / Plano Terapêutico"
+              value={treatmentPlan}
+              onChange={(e) => setTreatmentPlan(e.target.value)}
+              rows={2}
+            />
+            <Textarea
+              label="Observações Adicionais"
+              value={observations}
+              onChange={(e) => setObservations(e.target.value)}
+              rows={2}
+            />
+            <div className="flex justify-end gap-2 pt-2">
               <Button variant="ghost" onClick={() => setIsCreating(false)}>Cancelar</Button>
               <Button onClick={handleCreateRecord} loading={createRecord.isPending}>
                 Salvar Prontuário
