@@ -59,7 +59,8 @@ async def list_appointments(
     # Restrict patients to their own appointments
     if user.role == "PATIENT":
         patient_id = user.sub
-    if user.role == "DOCTOR":
+    # Doctors by default see their own appointments, but can see a specific patient's full history
+    if user.role == "DOCTOR" and not patient_id:
         doctor_id = user.sub
 
     async with _sf(request)() as session:
