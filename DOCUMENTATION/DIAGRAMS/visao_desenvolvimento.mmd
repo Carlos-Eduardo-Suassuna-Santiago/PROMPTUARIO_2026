@@ -1,0 +1,126 @@
+%%{init: {'theme': 'neutral'}}%%
+
+graph TB
+
+    subgraph CODIGO["📁 Estrutura de Código"]
+        FRONTEND_SRC["promptuario-frontend/\nsrc/ · components/ · pages/ · services/"]
+        BACKEND["backend/\ngateway/ · iam-service/ · patient-service/\nclinical-service/ · ai-service/ · reporting-service/\nshared/ · observability/ · scripts/ · backup/"]
+        DOCS["DOCUMENTATION/\n20+ documentos de arquitetura, requisitos e etapas"]
+    end
+
+    subgraph TECNOLOGIAS["⚙️ Stack Tecnológica"]
+        direction TB
+        LANG_FRONT["Frontend\nReact 18 · TypeScript 5 · Tailwind 4 · Vite 6 · Playwright"]
+        LANG_BACK["Backend\nPython 3.12 · FastAPI · SQLAlchemy · Celery · Pydantic"]
+        LANG_DB["Bancos\nPostgreSQL 15 · MongoDB 7 · Redis 7"]
+        LANG_INFRA["Infraestrutura\nDocker · RabbitMQ 3.13 · MinIO · Nginx"]
+        LANG_OBS["Observabilidade\nPrometheus · Grafana · Loki · Jaeger/Tempo · Alertmanager"]
+        LANG_CI["CI/CD\nGitHub Actions · Docker Hub · Smoke Tests"]
+    end
+
+    subgraph ARQUITETURA["🏗️ Arquitetura de Software"]
+        ARQ_PADROES["Padrões\nDDD · Clean Architecture · Event-Driven\nCQRS · API Gateway · Database per Service"]
+        ARQ_CAMADAS["Camadas\nPresentation → Application → Domain → Infrastructure"]
+        ARQ_COMUNICACAO["Comunicação\nSíncrona: HTTP/REST via Gateway\nAssíncrona: RabbitMQ Event-Driven\nCache: Redis · Storage: MinIO"]
+    end
+
+    subgraph MICROSERVICOS["🔧 Microserviços"]
+        SRV_GATEWAY["🔀 Gateway (:8000)\nFastAPI · JWT · Rate Limit\nCircuit Breaker · Cache · Roteamento"]
+        SRV_IAM["🔐 IAM (:8001)\nFastAPI · PostgreSQL · Redis\nJWT · bcrypt · RBAC"]
+        SRV_PATIENT["👤 Patient (:8002)\nFastAPI · PostgreSQL\nCRUD · Alergias · Vacinas · LGPD"]
+        SRV_CLINICAL["🏥 Clinical (:8003)\nFastAPI · PostgreSQL · MinIO\nAgenda · Prontuário · Prescrições"]
+        SRV_AI["🤖 AI (:8004)\nFastAPI · MongoDB · Motor\nJobs assíncronos · Análises"]
+        SRV_REPORTING["📊 Reporting (:8005)\nFastAPI · Celery · PostgreSQL · MinIO\nExportação · Dashboard"]
+    end
+
+    subgraph INFRAESTRUTURA["☁️ Infraestrutura"]
+        INFRA_COMPOSE["Docker Compose\n6 serviços + 6 DBs + Mensageria + Cache + Monitoring"]
+        INFRA_REDE["Rede Docker\nApenas Gateway exposto · Serviços internos isolados"]
+        INFRA_VOLUMES["Volumes Persistentes\nPostgreSQL · MongoDB · Redis · MinIO · Prometheus · Grafana · Loki"]
+    end
+
+    subgraph CI_CD["🔄 Pipeline CI/CD"]
+        CI_BUILD["Build\nDocker multi-stage · Cache de camadas"]
+        CI_TEST["Testes\npytest · ruff · Playwright E2E"]
+        CI_PUSH["Push\nDocker Hub: promptuario/{service}:latest"]
+        CI_DEPLOY["Deploy\ndocker-compose pull && up -d · Smoke Tests"]
+    end
+
+    subgraph SEGURANCA["🔒 Segurança"]
+        SEC_AUTH["Autenticação\nJWT + Refresh Token + Blacklist Redis + bcrypt"]
+        SEC_RBAC["Autorização\nRBAC: ADMIN · DOCTOR · ATTENDANT · PATIENT"]
+        SEC_NET["Rede\nGateway único · Circuit Breaker · Rate Limiting"]
+        SEC_DATA["Dados\nAnonimização LGPD · Mascaramento · Auditoria"]
+    end
+
+    subgraph MONITORAMENTO["📡 Monitoramento"]
+        MON_METRICAS["Métricas\nPrometheus · Latência · Erro · Requests"]
+        MON_LOGS["Logs\nLoki · JSON estruturado · Request ID · 90 dias"]
+        MON_TRACING["Tracing\nOpenTelemetry · Jaeger/Tempo · 7 dias"]
+        MON_ALERTAS["Alertas\nAlertmanager · Slack/PagerDuty · >500ms · >1% erro"]
+    end
+
+    subgraph FLUXO_EVENTOS["🔄 Eventos (RabbitMQ)"]
+        direction LR
+        EVT_IAM["promptuario.iam\nUserCreated · UserDeactivated"]
+        EVT_PATIENT["promptuario.patient\nPatientCreated · PatientUpdated · AllergyAdded"]
+        EVT_CLINICAL["promptuario.clinical\nAppointmentCreated · MedicalRecordCreated\nAppointmentCancelled · PrescriptionGenerated"]
+        EVT_AI["promptuario.ai\nAnalysisCompleted"]
+    end
+
+    %% Conexões Estruturais
+    CODIGO --> MICROSERVICOS
+    CODIGO --> TECNOLOGIAS
+    TECNOLOGIAS --> ARQUITETURA
+    ARQUITETURA --> MICROSERVICOS
+    MICROSERVICOS --> INFRAESTRUTURA
+    MICROSERVICOS --> FLUXO_EVENTOS
+    INFRAESTRUTURA --> MONITORAMENTO
+    CI_CD --> INFRAESTRUTURA
+    SEGURANCA --> MICROSERVICOS
+
+    %% Eventos (Publicação)
+    SRV_IAM -->|publica| EVT_IAM
+    SRV_PATIENT -->|publica| EVT_PATIENT
+    SRV_CLINICAL -->|publica| EVT_CLINICAL
+    SRV_AI -->|publica| EVT_AI
+
+    %% Eventos (Consumo)
+    EVT_IAM -->|consome| SRV_PATIENT
+    EVT_CLINICAL -->|consome| SRV_AI
+    EVT_PATIENT -->|consome| SRV_AI
+    EVT_CLINICAL -->|consome| SRV_REPORTING
+    EVT_PATIENT -->|consome| SRV_REPORTING
+
+    %% CI/CD
+    CI_BUILD --> CI_TEST --> CI_PUSH --> CI_DEPLOY
+
+    classDef codigo fill:#eceff1,stroke:#37474f,color:#000
+    classDef tech fill:#e3f2fd,stroke:#1565c0,color:#000
+    classDef arquitetura fill:#f3e5f5,stroke:#6a1b9a,color:#000
+    classDef gateway fill:#fff3e0,stroke:#e65100,color:#000
+    classDef iam fill:#e1bee7,stroke:#6a1b9a,color:#000
+    classDef patient fill:#c8e6c9,stroke:#2e7d32,color:#000
+    classDef clinico fill:#ffcdd2,stroke:#c62828,color:#000
+    classDef ia fill:#b2dfdb,stroke:#00695c,color:#000
+    classDef reporting fill:#fff9c4,stroke:#f57f17,color:#000
+    classDef infra fill:#e0f7fa,stroke:#00838f,color:#000
+    classDef cicd fill:#fff8e1,stroke:#f57c00,color:#000
+    classDef seguranca fill:#fce4ec,stroke:#b71c1c,color:#000
+    classDef monitor fill:#ede7f6,stroke:#4527a0,color:#000
+    classDef eventos fill:#e0e0e0,stroke:#616161,color:#000,stroke-dasharray: 5 5
+
+    class FRONTEND_SRC,BACKEND,DOCS codigo
+    class LANG_FRONT,LANG_BACK,LANG_DB,LANG_INFRA,LANG_OBS,LANG_CI tech
+    class ARQ_PADROES,ARQ_CAMADAS,ARQ_COMUNICACAO arquitetura
+    class SRV_GATEWAY gateway
+    class SRV_IAM iam
+    class SRV_PATIENT patient
+    class SRV_CLINICAL clinico
+    class SRV_AI ia
+    class SRV_REPORTING reporting
+    class INFRA_COMPOSE,INFRA_REDE,INFRA_VOLUMES infra
+    class CI_BUILD,CI_TEST,CI_PUSH,CI_DEPLOY cicd
+    class SEC_AUTH,SEC_RBAC,SEC_NET,SEC_DATA seguranca
+    class MON_METRICAS,MON_LOGS,MON_TRACING,MON_ALERTAS monitor
+    class EVT_IAM,EVT_PATIENT,EVT_CLINICAL,EVT_AI eventos
