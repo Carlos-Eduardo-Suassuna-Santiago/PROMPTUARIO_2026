@@ -12,12 +12,14 @@ from app.domain.models.schemas import (
     ExamRequestCreate, ExamRequestHistoryResponse, ExamRequestResponse, ExamResultUpdate,
     MedicalRecordCreate, MedicalRecordHistoryResponse, MedicalRecordResponse, MedicalRecordUpdate,
     PrescriptionCreate, PrescriptionHistoryResponse, PrescriptionPdfDownloadResponse, PrescriptionResponse,
+    MedicalCertificateCreate, MedicalCertificateResponse,
+    ScheduleCreate, ScheduleResponse,
     ScheduleCreate, ScheduleResponse,
     TimeSlotCreate, TimeSlotResponse,
 )
 from app.domain.services.clinical_service import (
     AppointmentService, ExamRequestService,
-    MedicalRecordService, PrescriptionService,
+    MedicalRecordService, PrescriptionService, MedicalCertificateService,
 )
 from shared.metrics import (
     consultations_total, prescriptions_total, medical_records_total, exam_requests_total,

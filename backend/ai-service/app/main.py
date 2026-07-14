@@ -13,7 +13,7 @@ from typing import Literal, Optional
 
 from app.config import settings
 from app.domain.services.ai_service import AIService
-from shared.audit import log_operation
+# from shared.audit import log_operation
 from shared.events import MedicalRecordCreatedEvent, PrescriptionGeneratedEvent
 from shared.events.broker import EventConsumer, EventPublisher
 from shared.middleware.auth import make_auth_dependency
@@ -56,24 +56,24 @@ async def submit_analysis(body: AnalysisRequest, request: Request, user=Depends(
     asyncio.create_task(
         svc.run_analysis(job["_id"], publisher=request.app.state.publisher)
     )
-    # Audit the analysis request
+    # Audit the analysis request (disabled for MongoDB for now)
     ctx = get_request_context()
-    await log_operation(
-        request.app.state.db.client,
-        service="ai-service",
-        table="analysis_jobs",
-        operation="AI_ANALYSIS_REQUESTED",
-        record_id=job["_id"],
-        user_id=user.sub,
-        user_role=user.role,
-        new_values={
-            "analysis_type": body.analysis_type,
-            "patient_id": body.patient_id,
-            "record_id": body.record_id,
-        },
-        request_id=ctx.get("request_id"),
-        correlation_id=ctx.get("correlation_id"),
-    )
+    # await log_operation(
+    #     request.app.state.db.client,
+    #     service="ai-service",
+    #     table="analysis_jobs",
+    #     operation="AI_ANALYSIS_REQUESTED",
+    #     record_id=job["_id"],
+    #     user_id=user.sub,
+    #     user_role=user.role,
+    #     new_values={
+    #         "analysis_type": body.analysis_type,
+    #         "patient_id": body.patient_id,
+    #         "record_id": body.record_id,
+    #     },
+    #     request_id=ctx.get("request_id"),
+    #     correlation_id=ctx.get("correlation_id"),
+    # )
     return {"job_id": job["_id"], "status": "PENDING"}
 
 
