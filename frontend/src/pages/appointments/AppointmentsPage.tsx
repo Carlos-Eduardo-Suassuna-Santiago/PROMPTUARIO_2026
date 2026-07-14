@@ -206,6 +206,9 @@ function ConsultationDetailsModal({
   const [observations, setObservations] = useState('')
   const [error, setError] = useState<string | null>(null)
 
+  const { data: doctors } = useDoctors()
+  const doctorName = doctors?.items?.find((d: any) => d.id === appointment?.doctor_id)?.full_name || 'Desconhecido'
+
   if (!appointment) return null
 
   const handleCreateRecord = async () => {
@@ -263,6 +266,14 @@ function ConsultationDetailsModal({
       <div className="space-y-4">
         {error && <Alert variant="error">{error}</Alert>}
         <div className="grid grid-cols-2 gap-4 text-sm text-slate-300 bg-slate-900 p-4 rounded-xl border border-slate-800">
+          <div className="col-span-2 sm:col-span-1">
+            <span className="block text-slate-500 mb-1 text-xs">Paciente</span>
+            <span className="font-medium text-slate-200">{appointment.patient_name || 'Desconhecido'}</span>
+          </div>
+          <div className="col-span-2 sm:col-span-1">
+            <span className="block text-slate-500 mb-1 text-xs">Médico</span>
+            <span className="font-medium text-slate-200">{doctorName}</span>
+          </div>
           <div>
             <span className="block text-slate-500 mb-1 text-xs">Horário</span>
             <span className="font-medium">{formatDateTime(appointment.scheduled_at)}</span>
@@ -364,9 +375,7 @@ function AppointmentRow({
           <span className="font-medium text-slate-200">{formatDateTime(appt.scheduled_at)}</span>
         </div>
       </Td>
-      <Td>
-        <span className="font-medium text-slate-200">{appt.patient_name || 'Desconhecido'}</span>
-      </Td>
+
       <Td>
         <Badge className="bg-slate-700/40 text-slate-300 ring-slate-600/30">
           {TYPE_LABELS[appt.appointment_type]}
@@ -520,7 +529,7 @@ export function AppointmentsPage() {
               <thead>
                 <tr>
                   <Th>Data / Hora</Th>
-                  <Th>Paciente</Th>
+
                   <Th>Tipo</Th>
                   <Th>Especialidade</Th>
                   <Th>Status</Th>
