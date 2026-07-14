@@ -188,6 +188,7 @@ function ConsultationDetailsModal({
   appointment,
   open,
   onClose,
+  canCreateRecord,
 }: {
   appointment: Appointment | null
   open: boolean
@@ -343,6 +344,7 @@ function ConsultationDetailsModal({
 function AppointmentRow({
   appt,
   canCancel,
+  canConfirm,
   onCancel,
   onConfirm,
   onDetails,
