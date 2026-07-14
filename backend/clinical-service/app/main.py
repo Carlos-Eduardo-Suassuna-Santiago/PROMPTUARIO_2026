@@ -10,7 +10,7 @@ from app.config import settings
 from app.domain.models.clinical import (
     Appointment, DoctorSchedule, ExamRequest, ExamRequestHistory,
     MedicalRecord, MedicalRecordHistory, PatientProjection,
-    Prescription, PrescriptionHistory, TimeSlot,
+    Prescription, PrescriptionHistory, MedicalCertificate, MedicalCertificateHistory, TimeSlot,
 )
 from app.domain.services.clinical_service import _ensure_s3_bucket
 from app.infrastructure.events.consumers import setup_consumers

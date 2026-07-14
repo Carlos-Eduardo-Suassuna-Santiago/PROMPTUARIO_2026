@@ -204,6 +204,62 @@ def _upload_pdf_to_s3(rx_id: str, pdf_bytes: bytes) -> str | None:
         return None
 
 
+def _generate_certificate_pdf(cert: MedicalCertificate, doctor_name: str, patient_name: str) -> bytes:
+    import weasyprint
+    html = f"""<html><head>
+<style>
+    body {{ font-family: sans-serif; color: #333; line-height: 1.6; padding: 40px; }}
+    .header h1 {{ color: #2563eb; margin: 0; font-size: 20px; }}
+    .header p {{ color: #666; margin: 5px 0; }}
+    .info {{ margin-bottom: 20px; }}
+    .info td {{ padding: 2px 10px; }}
+    .content {{ margin: 40px 0; text-align: justify; font-size: 16px; line-height: 1.8; }}
+    .footer {{ margin-top: 50px; text-align: center; color: #999; font-size: 10px; }}
+    .signature {{ margin-top: 80px; }}
+    .signature-line {{ border-top: 1px solid #333; width: 300px; margin: 0 auto; padding-top: 5px; text-align: center; }}
+</style>
+</head><body>
+<div class="header">
+    <h1>PROMPTUÁRIO — Atestado Médico</h1>
+    <p>ID: {cert.id}</p>
+</div>
+<div class="info">
+    <table><tr><td><strong>Data de Emissão:</strong> {cert.created_at.strftime('%d/%m/%Y %H:%M')}</td></tr></table>
+</div>
+<div class="content">
+    <p>Atesto, para os devidos fins, que o(a) paciente <strong>{patient_name}</strong> foi submetido(a) a avaliação médica nesta data ({cert.start_date.strftime('%d/%m/%Y')}) e necessita de <strong>{cert.days_off} dias de repouso</strong> por motivos de saúde.</p>
+    <p><strong>Motivo / CID:</strong> {cert.reason}</p>
+    {f"<p><strong>Observações:</strong> {cert.notes}</p>" if cert.notes else ""}
+</div>
+<div class="signature">
+    <div class="signature-line">{doctor_name}</div>
+</div>
+<div class="footer">
+    <p>Documento gerado eletronicamente pelo sistema Promptuário em {cert.created_at.strftime('%d/%m/%Y às %H:%M')}</p>
+    <p>Hash de integridade: {cert.signature_hash or 'N/A'}</p>
+</div>
+</body></html>"""
+
+    pdf_bytes = weasyprint.HTML(string=html).write_pdf()
+    return pdf_bytes
+
+
+def _upload_certificate_pdf_to_s3(cert_id: str, pdf_bytes: bytes) -> str | None:
+    try:
+        s3 = _get_s3_client()
+        s3_key = f"certificates/{cert_id[:2]}/{cert_id[2:4]}/{cert_id}.pdf"
+        s3.put_object(
+            # Using the same bucket for clinical documents
+            Bucket=settings.S3_BUCKET_PRESCRIPTIONS,
+            Key=s3_key,
+            Body=pdf_bytes,
+            ContentType="application/pdf",
+        )
+        return s3_key
+    except ClientError as e:
+        logger.error("S3 Certificate PDF upload failed: %s", e)
+        return None
+
 # ─── Services ─────────────────────────────────────────────────────────────────
 
 
@@ -752,3 +808,124 @@ class ExamRequestService:
             new_values={"has_result": bool(data.result)},
         )
         return exam
+
+
+class MedicalCertificateService:
+    def __init__(self, session: AsyncSession):
+        self.record_repo = MedicalRecordRepository(session)
+        self.cert_repo = MedicalCertificateRepository(session)
+        self.session = session
+
+    async def create(self, record_id: str, data: MedicalCertificateCreate, doctor_id: str) -> MedicalCertificate:
+        record = await self.record_repo.get(record_id)
+        if not record:
+            raise HTTPException(status_code=404, detail="Prontuário não encontrado")
+        if record.doctor_id != doctor_id:
+            raise HTTPException(status_code=403, detail="Acesso negado")
+
+        cert = MedicalCertificate(
+            id=str(uuid.uuid4()),
+            record_id=record_id,
+            patient_id=record.patient_id,
+            doctor_id=doctor_id,
+            reason=data.reason,
+            days_off=data.days_off,
+            start_date=data.start_date,
+            notes=data.notes,
+        )
+
+        # Buscar nome do paciente ANTES do commit (a sessão expira após commit)
+        patient_name = "Paciente"
+        try:
+            from sqlalchemy import select as _select
+            from app.domain.models.clinical import PatientProjection
+            proj_result = await self.session.execute(
+                _select(PatientProjection).where(PatientProjection.id == record.patient_id)
+            )
+            proj = proj_result.scalar_one_or_none()
+            if proj:
+                patient_name = proj.full_name
+        except Exception:
+            logger.warning("Não foi possível buscar nome do paciente para atestado %s", cert.id)
+
+        self.session.add(cert)
+        await self.session.flush()
+        await self.session.refresh(cert)
+
+        if settings.PDF_GENERATION_ENABLED:
+            try:
+                doctor_name = doctor_id
+                pdf_bytes = _generate_certificate_pdf(cert, doctor_name=doctor_name, patient_name=patient_name)
+                s3_key = _upload_certificate_pdf_to_s3(cert.id, pdf_bytes)
+
+                if s3_key:
+                    cert.pdf_s3_key = s3_key
+                    cert.pdf_generated_at = datetime.now(timezone.utc)
+                    import hashlib
+                    cert.signature_hash = hashlib.sha256(pdf_bytes).hexdigest()
+                    cert.signed_by = doctor_id
+                    cert.signed_at = datetime.now(timezone.utc)
+
+                    await self.session.flush()
+                    await self.session.refresh(cert)
+                    logger.info("Certificate PDF generated: cert=%s, s3_key=%s", cert.id, s3_key)
+            except Exception as e:
+                logger.error("Certificate PDF generation failed (non-fatal): %s", e)
+
+        # Audit trail
+        await self.cert_repo.add_history(MedicalCertificateHistory(
+            id=str(uuid.uuid4()),
+            certificate_id=cert.id,
+            record_id=record_id,
+            changed_by=doctor_id,
+            change_type="CREATED",
+            snapshot={
+                "days_off": cert.days_off,
+                "has_pdf": cert.pdf_s3_key is not None,
+            },
+        ))
+
+        await log_operation(
+            self.session,
+            service="clinical-service",
+            table="medical_certificates",
+            operation="INSERT",
+            record_id=cert.id,
+            user_id=doctor_id,
+            user_role="DOCTOR",
+            new_values={
+                "record_id": record_id,
+                "days_off": cert.days_off,
+                "has_pdf": cert.pdf_s3_key is not None,
+            },
+        )
+        await self.session.commit()
+        return cert
+
+    async def get_pdf_download_url(self, certificate_id: str) -> str:
+        cert = await self.cert_repo.get(certificate_id)
+        if not cert:
+            raise HTTPException(status_code=404, detail="Atestado não encontrado")
+        if not cert.pdf_s3_key:
+            raise HTTPException(status_code=400, detail="PDF ainda não foi gerado para este atestado")
+
+        try:
+            s3 = _get_s3_client()
+            url = s3.generate_presigned_url(
+                "get_object",
+                Params={
+                    "Bucket": settings.S3_BUCKET_PRESCRIPTIONS,
+                    "Key": cert.pdf_s3_key,
+                    "ResponseContentDisposition": f'inline; filename="atestado_{cert.id}.pdf"',
+                },
+                ExpiresIn=settings.S3_PRESIGNED_URL_EXPIRY,
+            )
+            if "http://minio:9000" in url:
+                url = url.replace("http://minio:9000", settings.S3_PUBLIC_ENDPOINT)
+            elif settings.S3_ENDPOINT in url and hasattr(settings, "S3_PUBLIC_ENDPOINT") and settings.S3_PUBLIC_ENDPOINT:
+                url = url.replace(settings.S3_ENDPOINT, settings.S3_PUBLIC_ENDPOINT)
+            return url
+        except ClientError as e:
+            logger.error("S3 pre-signed URL generation failed: %s", e)
+            raise HTTPException(status_code=500, detail="Falha ao gerar URL de download do PDF")
+

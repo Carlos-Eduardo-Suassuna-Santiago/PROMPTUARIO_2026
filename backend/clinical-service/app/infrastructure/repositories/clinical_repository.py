@@ -103,6 +103,7 @@ class MedicalRecordRepository:
             q = q.options(
                 selectinload(MedicalRecord.prescriptions),
                 selectinload(MedicalRecord.exam_requests),
+                selectinload(MedicalRecord.certificates),
                 selectinload(MedicalRecord.history),
             )
         result = await self.session.execute(q)
@@ -123,6 +124,7 @@ class MedicalRecordRepository:
             .options(
                 selectinload(MedicalRecord.prescriptions),
                 selectinload(MedicalRecord.exam_requests),
+                selectinload(MedicalRecord.certificates),
                 selectinload(MedicalRecord.history),
             )
             .where(MedicalRecord.patient_id == patient_id)
@@ -144,6 +146,7 @@ class MedicalRecordRepository:
         query = query.options(
             selectinload(MedicalRecord.prescriptions),
             selectinload(MedicalRecord.exam_requests),
+            selectinload(MedicalRecord.certificates),
             selectinload(MedicalRecord.history),
         )
 
@@ -204,6 +207,28 @@ class ExamRequestRepository:
         return result.scalar_one_or_none()
 
     async def add_history(self, history: ExamRequestHistory) -> None:
+        self.session.add(history)
+        await self.session.flush()
+        await self.session.commit()
+
+
+class MedicalCertificateRepository:
+    def __init__(self, session: AsyncSession):
+        self.session = session
+
+    async def get(self, certificate_id: str) -> MedicalCertificate | None:
+        result = await self.session.execute(
+            select(MedicalCertificate).where(MedicalCertificate.id == certificate_id)
+        )
+        return result.scalar_one_or_none()
+
+    async def update(self, certificate: MedicalCertificate) -> MedicalCertificate:
+        await self.session.flush()
+        await self.session.refresh(certificate)
+        await self.session.commit()
+        return certificate
+
+    async def add_history(self, history: MedicalCertificateHistory) -> None:
         self.session.add(history)
         await self.session.flush()
         await self.session.commit()

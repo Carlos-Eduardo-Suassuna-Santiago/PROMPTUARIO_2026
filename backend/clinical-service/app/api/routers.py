@@ -384,6 +384,72 @@ async def download_prescription_pdf(
     return RedirectResponse(url=url, status_code=302)
 
 
+# ─── Certificates ─────────────────────────────────────────────────────────────
+
+@records_router.post(
+    "/{record_id}/certificates",
+    response_model=MedicalCertificateResponse,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require_roles("DOCTOR"))],
+)
+async def create_certificate(record_id: str, body: MedicalCertificateCreate, request: Request, user=Depends(get_current_user)):
+    async with _sf(request)() as session:
+        svc = MedicalCertificateService(session)
+        result = await svc.create(record_id, body, user.sub)
+        return MedicalCertificateResponse.model_validate(result)
+
+
+@records_router.get(
+    "/{record_id}/certificates/{certificate_id}/pdf",
+    summary="Download do PDF do atestado",
+)
+async def download_certificate_pdf(
+    record_id: str,
+    certificate_id: str,
+    request: Request,
+    user=Depends(get_current_user),
+):
+    import boto3 as _boto3
+    from sqlalchemy import select
+    from app.domain.models.clinical import MedicalCertificate as _MedicalCertificate
+    from fastapi.responses import JSONResponse, RedirectResponse
+
+    async with _sf(request)() as session:
+        result = await session.execute(
+            select(_MedicalCertificate).where(
+                _MedicalCertificate.id == certificate_id,
+                _MedicalCertificate.record_id == record_id,
+            )
+        )
+        cert = result.scalar_one_or_none()
+
+    if not cert:
+        raise HTTPException(status_code=404, detail="Atestado não encontrado")
+
+    if not cert.pdf_s3_key:
+        return JSONResponse(
+            status_code=202,
+            content={"detail": "PDF ainda está sendo gerado. Tente novamente em alguns segundos."},
+        )
+
+    s3 = _boto3.client(
+        "s3",
+        endpoint_url=_settings.S3_ENDPOINT,
+        aws_access_key_id=_settings.S3_ACCESS_KEY,
+        aws_secret_access_key=_settings.S3_SECRET_KEY,
+    )
+    url = s3.generate_presigned_url(
+        "get_object",
+        Params={"Bucket": _settings.S3_BUCKET_PRESCRIPTIONS, "Key": cert.pdf_s3_key},
+        ExpiresIn=300,
+    )
+    if "http://minio:9000" in url:
+        url = url.replace("http://minio:9000", _settings.S3_PUBLIC_ENDPOINT)
+    elif _settings.S3_ENDPOINT in url and hasattr(_settings, "S3_PUBLIC_ENDPOINT") and _settings.S3_PUBLIC_ENDPOINT:
+        url = url.replace(_settings.S3_ENDPOINT, _settings.S3_PUBLIC_ENDPOINT)
+    return RedirectResponse(url=url, status_code=302)
+
+
 # ─── Exam Requests ────────────────────────────────────────────────────────────
 
 @records_router.post(

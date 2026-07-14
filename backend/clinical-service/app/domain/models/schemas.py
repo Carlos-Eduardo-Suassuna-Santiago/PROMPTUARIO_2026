@@ -199,6 +199,45 @@ class ExamRequestHistoryResponse(BaseModel):
     model_config = {"from_attributes": True}
 
 
+# ─── Medical Certificates ────────────────────────────────────────────────────
+
+class MedicalCertificateCreate(BaseModel):
+    reason: str = Field(min_length=5)
+    days_off: int = Field(ge=1, le=365)
+    start_date: date
+    notes: str | None = None
+
+class MedicalCertificatePdfDownloadResponse(BaseModel):
+    download_url: str
+    expires_in_seconds: int = 300
+
+class MedicalCertificateResponse(BaseModel):
+    id: str
+    record_id: str
+    patient_id: str
+    doctor_id: str
+    reason: str
+    days_off: int
+    start_date: date
+    notes: str | None
+    pdf_s3_key: str | None
+    pdf_generated_at: datetime | None
+    signature_hash: str | None
+    signed_by: str | None
+    signed_at: datetime | None
+    created_at: datetime
+    model_config = {"from_attributes": True}
+
+class MedicalCertificateHistoryResponse(BaseModel):
+    id: str
+    certificate_id: str
+    changed_by: str
+    change_type: str
+    snapshot: dict
+    created_at: datetime
+    model_config = {"from_attributes": True}
+
+
 # ─── Medical Record Full Response ────────────────────────────────────────────
 
 class MedicalRecordResponse(BaseModel):
@@ -220,6 +259,7 @@ class MedicalRecordResponse(BaseModel):
     ai_analysis_id: str | None
     prescriptions: list[PrescriptionResponse] = []
     exam_requests: list[ExamRequestResponse] = []
+    certificates: list[MedicalCertificateResponse] = []
     history: list[MedicalRecordHistoryResponse] = []
     created_at: datetime
     updated_at: datetime

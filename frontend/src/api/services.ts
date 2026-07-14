@@ -181,6 +181,15 @@ export const recordsApi = {
       responseType: 'blob',
     }),
 
+  // Certificates
+  createCertificate: (recordId: string, data: { reason: string; days_off: number; start_date: string; notes?: string }) =>
+    api.post<MedicalCertificate>(`/records/${recordId}/certificates`, data).then(r => r.data),
+
+  downloadCertificate: (recordId: string, certificateId: string) =>
+    api.get(`/records/${recordId}/certificates/${certificateId}/pdf`, {
+      responseType: 'blob',
+    }),
+
   // Exams
   createExam: (recordId: string, data: { exam_type: string; urgency: string; instructions?: string }) =>
     api.post<ExamRequest>(`/records/${recordId}/exams`, data).then(r => r.data),
@@ -224,6 +233,49 @@ export const reportsApi = {
 }
 
 // ─── Audit ──────────────────────────────────────────────────────────────────
+
+export interface MedicalCertificate {
+  id: string
+  record_id: string
+  patient_id: string
+  doctor_id: string
+  reason: string
+  days_off: number
+  start_date: string
+  notes?: string
+  pdf_s3_key?: string
+  pdf_generated_at?: string
+  signature_hash?: string
+  signed_by?: string
+  signed_at?: string
+  created_at: string
+}
+
+export interface MedicalRecord {
+  id: string
+  appointment_id: string
+  patient_id: string
+  doctor_id: string
+  chief_complaint: string
+  anamnesis?: string
+  physical_exam?: string
+  diagnosis?: string
+  diagnosis_codes: string[]
+  treatment_plan?: string
+  observations?: string
+  rich_notes?: Record<string, unknown>
+  signature_hash?: string
+  signed_by?: string
+  signed_at?: string
+  ai_analysis_id?: string
+  prescriptions: Prescription[]
+  exam_requests: ExamRequest[]
+  certificates: MedicalCertificate[]
+  history: RecordHistory[]
+  created_at: string
+  updated_at: string
+}
+
 export const auditApi = {
   logs: (params?: {
     service?: string; table_name?: string; operation?: string;

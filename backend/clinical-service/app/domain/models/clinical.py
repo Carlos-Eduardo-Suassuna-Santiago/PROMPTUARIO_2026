@@ -145,6 +145,9 @@ class MedicalRecord(Base):
     exam_requests: Mapped[list["ExamRequest"]] = relationship(
         "ExamRequest", back_populates="record", cascade="all, delete-orphan"
     )
+    certificates: Mapped[list["MedicalCertificate"]] = relationship(
+        "MedicalCertificate", back_populates="record", cascade="all, delete-orphan"
+    )
     history: Mapped[list["MedicalRecordHistory"]] = relationship(
         "MedicalRecordHistory", back_populates="record", cascade="all, delete-orphan"
     )
@@ -255,3 +258,47 @@ class ExamRequestHistory(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
     exam: Mapped[ExamRequest] = relationship("ExamRequest", back_populates="history")
+
+
+# ─── Medical Certificates ────────────────────────────────────────────────────
+
+class MedicalCertificate(Base):
+    __tablename__ = "medical_certificates"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    record_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("medical_records.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    patient_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    doctor_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    
+    reason: Mapped[str] = mapped_column(Text, nullable=False)
+    days_off: Mapped[int] = mapped_column(Integer, nullable=False)
+    start_date: Mapped[date] = mapped_column(Date, nullable=False)
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    pdf_s3_key: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    pdf_generated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    signature_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    signed_by: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    signed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+    record: Mapped[MedicalRecord] = relationship("MedicalRecord", back_populates="certificates")
+
+
+class MedicalCertificateHistory(Base):
+    """Immutable audit trail for medical certificate changes."""
+    __tablename__ = "medical_certificate_history"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    certificate_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("medical_certificates.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    record_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    changed_by: Mapped[str] = mapped_column(String(36), nullable=False)
+    change_type: Mapped[str] = mapped_column(String(50), nullable=False)
+    snapshot: Mapped[dict] = mapped_column(JSON, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
