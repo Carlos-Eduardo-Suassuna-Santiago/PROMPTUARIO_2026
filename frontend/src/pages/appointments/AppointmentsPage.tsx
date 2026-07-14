@@ -6,7 +6,7 @@ import { Calendar, Plus, X, CheckCircle, Clock, Search, Eye, FileText } from 'lu
 import { useNavigate } from 'react-router-dom'
 import {
   useAppointments, useCreateAppointment, useCancelAppointment, useConfirmAppointment,
-  usePatients, useDoctors, useCreateRecord
+  usePatients, usePatient, useDoctors, useCreateRecord
 } from '@/hooks'
 import { PageHeader } from '@/components/layout/AppShell'
 import {
@@ -352,6 +352,7 @@ function AppointmentRow({
   onConfirm: (appt: Appointment) => void
   onDetails: (appt: Appointment) => void
 }) {
+  const { data: patient } = usePatient(appt.patient_id)
   return (
     <tr className="hover:bg-slate-800/20 transition-colors">
       <Td>
@@ -359,6 +360,9 @@ function AppointmentRow({
           <Clock className="w-3.5 h-3.5 text-slate-600" />
           <span className="font-medium text-slate-200">{formatDateTime(appt.scheduled_at)}</span>
         </div>
+      </Td>
+      <Td>
+        <span className="font-medium text-slate-200">{patient?.full_name || 'Carregando...'}</span>
       </Td>
       <Td>
         <Badge className="bg-slate-700/40 text-slate-300 ring-slate-600/30">
@@ -512,6 +516,7 @@ export function AppointmentsPage() {
               <thead>
                 <tr>
                   <Th>Data / Hora</Th>
+                  <Th>Paciente</Th>
                   <Th>Tipo</Th>
                   <Th>Especialidade</Th>
                   <Th>Status</Th>
