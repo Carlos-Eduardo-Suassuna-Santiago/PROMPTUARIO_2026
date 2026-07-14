@@ -19,7 +19,7 @@ import {
   Badge, PageLoader, EmptyState, Modal, Alert, Table, Th, Td, Spinner,
 } from '@/components/ui'
 import { formatDate, formatDateTime, formatRelative, RISK_COLORS, getErrorMessage, cn } from '@/utils'
-import { useIsDoctor } from '@/store/auth.store'
+import { useIsDoctor, useAuthStore } from '@/store/auth.store'
 import { recordsApi } from '@/api/services'
 import type { MedicalRecord } from '@/types'
 
