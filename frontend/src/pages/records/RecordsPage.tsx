@@ -196,8 +196,11 @@ function RecordCard({ record }: { record: MedicalRecord }) {
           </div>
           <div>
             <p className="text-sm font-semibold text-slate-200 line-clamp-1">{record.chief_complaint}</p>
-            <p className="text-xs text-slate-500 mt-0.5">{formatDateTime(record.created_at)}</p>
-            <p className="text-[10px] text-slate-600 mt-0.5 font-mono">ID: {record.id}</p>
+            {record.patient_name && (
+              <p className="text-xs text-slate-400 mt-1 font-medium">{record.patient_name}</p>
+            )}
+            <p className="text-[10px] text-slate-500 mt-1">{formatDateTime(record.created_at)}</p>
+            <p className="text-[10px] text-slate-600 font-mono">ID: {record.id}</p>
           </div>
         </div>
         <div className="flex items-center gap-2 flex-shrink-0">

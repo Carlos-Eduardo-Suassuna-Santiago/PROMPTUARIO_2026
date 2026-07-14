@@ -167,6 +167,14 @@ async def complete_appointment(appointment_id: str, request: Request, user=Depen
 
 # ─── Medical Records ──────────────────────────────────────────────────────────
 
+async def _inject_patient_name(session, record):
+    from app.domain.models.clinical import PatientProjection
+    proj = await session.get(PatientProjection, record.patient_id)
+    dto = MedicalRecordResponse.model_validate(record)
+    if proj:
+        dto.patient_name = proj.full_name
+    return dto
+
 @records_router.post(
     "",
     response_model=MedicalRecordResponse,
@@ -179,14 +187,15 @@ async def create_record(body: MedicalRecordCreate, request: Request, user=Depend
         record = await svc.create(body, user.sub)
         medical_records_total.labels(service=_settings.SERVICE_NAME).inc()
         record = await svc.repo.get(record.id, load_relations=True)
-        return MedicalRecordResponse.model_validate(record)
+        return await _inject_patient_name(session, record)
 
 
 @records_router.get("/{record_id}", response_model=MedicalRecordResponse)
 async def get_record(record_id: str, request: Request, user=Depends(get_current_user)):
     async with _sf(request)() as session:
         svc = MedicalRecordService(session, _pub(request))
-        return MedicalRecordResponse.model_validate(await svc.get(record_id, user.sub, user.role))
+        record = await svc.get(record_id, user.sub, user.role)
+        return await _inject_patient_name(session, record)
 
 
 @records_router.put(
@@ -199,7 +208,7 @@ async def update_record(record_id: str, body: MedicalRecordUpdate, request: Requ
         svc = MedicalRecordService(session, _pub(request))
         record = await svc.update(record_id, body, user.sub)
         record = await svc.repo.get(record.id, load_relations=True)
-        return MedicalRecordResponse.model_validate(record)
+        return await _inject_patient_name(session, record)
 
 
 @records_router.post(
@@ -213,7 +222,7 @@ async def sign_record(record_id: str, request: Request, user=Depends(get_current
         svc = MedicalRecordService(session, _pub(request))
         record = await svc.sign(record_id, user.sub)
         record = await svc.repo.get(record.id, load_relations=True)
-        return MedicalRecordResponse.model_validate(record)
+        return await _inject_patient_name(session, record)
 
 
 @records_router.get(
@@ -254,8 +263,28 @@ async def list_records(
         svc = MedicalRecordService(session, _pub(request))
         doctor_id = user.sub if user.role == "DOCTOR" else None
         items, total = await svc.list_records(doctor_id, page, size)
+        
+        # Obter nomes dos pacientes
+        p_ids = list({r.patient_id for r in items})
+        p_names = {}
+        if p_ids:
+            from app.domain.models.clinical import PatientProjection
+            from sqlalchemy import select
+            res = await session.execute(
+                select(PatientProjection.id, PatientProjection.full_name)
+                .where(PatientProjection.id.in_(p_ids))
+            )
+            for row in res.all():
+                p_names[row.id] = row.full_name
+                
+        response_items = []
+        for r in items:
+            dto = MedicalRecordResponse.model_validate(r)
+            dto.patient_name = p_names.get(r.patient_id)
+            response_items.append(dto)
+            
         return {
-            "items": [MedicalRecordResponse.model_validate(r) for r in items],
+            "items": response_items,
             "total": total, "page": page, "size": size,
         }
 
@@ -273,8 +302,28 @@ async def list_patient_records(
     async with _sf(request)() as session:
         svc = MedicalRecordService(session, _pub(request))
         items, total = await svc.list_by_patient(patient_id, page, size)
+        
+        # Obter nomes dos pacientes
+        p_ids = list({r.patient_id for r in items})
+        p_names = {}
+        if p_ids:
+            from app.domain.models.clinical import PatientProjection
+            from sqlalchemy import select
+            res = await session.execute(
+                select(PatientProjection.id, PatientProjection.full_name)
+                .where(PatientProjection.id.in_(p_ids))
+            )
+            for row in res.all():
+                p_names[row.id] = row.full_name
+                
+        response_items = []
+        for r in items:
+            dto = MedicalRecordResponse.model_validate(r)
+            dto.patient_name = p_names.get(r.patient_id)
+            response_items.append(dto)
+
         return {
-            "items": [MedicalRecordResponse.model_validate(r) for r in items],
+            "items": response_items,
             "total": total, "page": page, "size": size,
         }
 

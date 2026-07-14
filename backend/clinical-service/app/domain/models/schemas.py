@@ -244,6 +244,7 @@ class MedicalRecordResponse(BaseModel):
     id: str
     appointment_id: str
     patient_id: str
+    patient_name: str | None = None
     doctor_id: str
     chief_complaint: str
     anamnesis: str | None

@@ -212,6 +212,7 @@ export interface MedicalRecord {
   id: string
   appointment_id: string
   patient_id: string
+  patient_name?: string
   doctor_id: string
   chief_complaint: string
   anamnesis: string | null
