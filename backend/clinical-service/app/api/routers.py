@@ -116,14 +116,26 @@ async def create_appointment(body: AppointmentCreate, request: Request, user=Dep
         svc = AppointmentService(session, _pub(request))
         result = await svc.create(body, user.sub)
         consultations_total.labels(service=_settings.SERVICE_NAME, status="scheduled").inc()
-        return AppointmentResponse.model_validate(result)
+        
+        dto = AppointmentResponse.model_validate(result)
+        from app.domain.models.clinical import PatientProjection
+        from sqlalchemy import select
+        p_name = await session.scalar(select(PatientProjection.full_name).where(PatientProjection.user_id == result.patient_id))
+        dto.patient_name = p_name
+        return dto
 
 
 @appointments_router.get("/{appointment_id}", response_model=AppointmentResponse)
 async def get_appointment(appointment_id: str, request: Request, user=Depends(get_current_user)):
     async with _sf(request)() as session:
         svc = AppointmentService(session, _pub(request))
-        return AppointmentResponse.model_validate(await svc.get(appointment_id))
+        result = await svc.get(appointment_id)
+        dto = AppointmentResponse.model_validate(result)
+        from app.domain.models.clinical import PatientProjection
+        from sqlalchemy import select
+        p_name = await session.scalar(select(PatientProjection.full_name).where(PatientProjection.user_id == result.patient_id))
+        dto.patient_name = p_name
+        return dto
 
 
 @appointments_router.put("/{appointment_id}/cancel", response_model=AppointmentResponse)
@@ -137,7 +149,12 @@ async def cancel_appointment(
         svc = AppointmentService(session, _pub(request))
         result = await svc.cancel(appointment_id, body, user.sub, user.role)
         consultations_total.labels(service=_settings.SERVICE_NAME, status="cancelled").inc()
-        return AppointmentResponse.model_validate(result)
+        dto = AppointmentResponse.model_validate(result)
+        from app.domain.models.clinical import PatientProjection
+        from sqlalchemy import select
+        p_name = await session.scalar(select(PatientProjection.full_name).where(PatientProjection.user_id == result.patient_id))
+        dto.patient_name = p_name
+        return dto
 
 
 @appointments_router.put(
@@ -150,7 +167,12 @@ async def confirm_appointment(appointment_id: str, request: Request, user=Depend
         svc = AppointmentService(session, _pub(request))
         result = await svc.confirm(appointment_id)
         consultations_total.labels(service=_settings.SERVICE_NAME, status="confirmed").inc()
-        return AppointmentResponse.model_validate(result)
+        dto = AppointmentResponse.model_validate(result)
+        from app.domain.models.clinical import PatientProjection
+        from sqlalchemy import select
+        p_name = await session.scalar(select(PatientProjection.full_name).where(PatientProjection.user_id == result.patient_id))
+        dto.patient_name = p_name
+        return dto
 
 
 @appointments_router.put(
@@ -163,7 +185,12 @@ async def complete_appointment(appointment_id: str, request: Request, user=Depen
         svc = AppointmentService(session, _pub(request))
         result = await svc.complete(appointment_id)
         consultations_total.labels(service=_settings.SERVICE_NAME, status="completed").inc()
-        return AppointmentResponse.model_validate(result)
+        dto = AppointmentResponse.model_validate(result)
+        from app.domain.models.clinical import PatientProjection
+        from sqlalchemy import select
+        p_name = await session.scalar(select(PatientProjection.full_name).where(PatientProjection.user_id == result.patient_id))
+        dto.patient_name = p_name
+        return dto
 
 
 # ─── Medical Records ──────────────────────────────────────────────────────────
