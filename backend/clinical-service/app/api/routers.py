@@ -222,10 +222,13 @@ async def get_record_history(record_id: str, request: Request):
 @records_router.get("/patient/{patient_id}", response_model=dict)
 async def list_patient_records(
     patient_id: str, request: Request,
-    user=Depends(require_roles("DOCTOR", "ADMIN")),
+    user=Depends(require_roles("DOCTOR", "ADMIN", "PATIENT")),
     page: int = Query(1, ge=1),
     size: int = Query(20, ge=1, le=50),
 ):
+    if user.role == "PATIENT" and patient_id != user.sub:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=403, detail="Acesso negado")
     async with _sf(request)() as session:
         svc = MedicalRecordService(session, _pub(request))
         items, total = await svc.list_by_patient(patient_id, page, size)

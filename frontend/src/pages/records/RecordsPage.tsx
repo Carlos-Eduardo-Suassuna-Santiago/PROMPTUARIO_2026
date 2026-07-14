@@ -491,12 +491,12 @@ function RecordDetailView({ recordId }: { recordId: string }) {
   )
 }
 
-// ─── Records List Page ────────────────────────────────────────────────────
 export function RecordsPage() {
   const { patientId, recordId } = useParams<{ patientId?: string; recordId?: string }>()
   const [createModal, setCreateModal] = useState(false)
   const isDoctor = useIsDoctor()
   const navigate = useNavigate()
+  const { user } = useAuthStore()
 
   // If viewing a specific record
   if (recordId) {
@@ -520,7 +520,7 @@ export function RecordsPage() {
   }
 
   // If viewing records for a patient
-  const pid = patientId ?? ''
+  const pid = patientId || user?.id || ''
   const { data: records, isLoading } = usePatientRecords(pid)
 
   return (

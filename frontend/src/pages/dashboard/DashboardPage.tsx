@@ -243,7 +243,7 @@ function PatientDashboard() {
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         {[
           { label: 'Minhas consultas', href: '/appointments', icon: <Calendar className="w-5 h-5" />, color: 'brand' },
-          { label: 'Meu prontuário', href: '/records', icon: <FileText className="w-5 h-5" />, color: 'violet' },
+          { label: 'Prontuários e Receitas', href: '/records', icon: <FileText className="w-5 h-5" />, color: 'violet' },
           { label: 'Histórico', href: '/records', icon: <Clock className="w-5 h-5" />, color: 'amber' },
         ].map((item) => (
           <Link key={item.label} to={item.href}>

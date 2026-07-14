@@ -14,6 +14,7 @@ import {
   Alert,
 } from '@/components/ui'
 import { formatDate, calculateAge, cn, getErrorMessage } from '@/utils'
+import { useAuthStore } from '@/store/auth.store'
 import type { Patient } from '@/types'
 
 // ─── Create Patient Modal ─────────────────────────────────────────────────
@@ -250,6 +251,9 @@ export function PatientListPage() {
     }, 350)
   }
 
+  const { role } = useAuthStore()
+  const canCreate = role !== 'DOCTOR'
+
   const { data, isLoading } = usePatients({
     page,
     size: 20,
@@ -268,12 +272,14 @@ export function PatientListPage() {
         title="Pacientes"
         description={`${data?.total ?? 0} pacientes cadastrados`}
         action={
-          <Button
-            icon={<Plus className="w-4 h-4" />}
-            onClick={() => setCreateOpen(true)}
-          >
-            Novo Paciente
-          </Button>
+          canCreate ? (
+            <Button
+              icon={<Plus className="w-4 h-4" />}
+              onClick={() => setCreateOpen(true)}
+            >
+              Novo Paciente
+            </Button>
+          ) : undefined
         }
       />
 
@@ -295,9 +301,9 @@ export function PatientListPage() {
             <EmptyState
               icon={<UserRound className="w-8 h-8" />}
               title="Nenhum paciente encontrado"
-              description={debouncedSearch ? 'Tente outro termo de busca' : 'Cadastre o primeiro paciente'}
+              description={debouncedSearch ? 'Tente outro termo de busca' : (canCreate ? 'Cadastre o primeiro paciente' : 'Nenhum paciente cadastrado')}
               action={
-                !debouncedSearch ? (
+                !debouncedSearch && canCreate ? (
                   <Button icon={<Plus className="w-4 h-4" />} onClick={() => setCreateOpen(true)}>
                     Cadastrar Paciente
                   </Button>

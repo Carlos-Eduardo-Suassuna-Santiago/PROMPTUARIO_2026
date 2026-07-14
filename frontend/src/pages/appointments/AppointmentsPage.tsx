@@ -2,10 +2,11 @@ import { useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import { Calendar, Plus, X, CheckCircle, Clock, Search } from 'lucide-react'
+import { Calendar, Plus, X, CheckCircle, Clock, Search, Eye, FileText } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
 import {
   useAppointments, useCreateAppointment, useCancelAppointment, useConfirmAppointment,
-  usePatients, useDoctors,
+  usePatients, useDoctors, useCreateRecord
 } from '@/hooks'
 import { PageHeader } from '@/components/layout/AppShell'
 import {
@@ -182,17 +183,124 @@ function CancelModal({
   )
 }
 
+// ─── Consultation Details Modal ───────────────────────────────────────────
+function ConsultationDetailsModal({
+  appointment,
+  open,
+  onClose,
+}: {
+  appointment: Appointment | null
+  open: boolean
+  onClose: () => void
+}) {
+  const navigate = useNavigate()
+  const createRecord = useCreateRecord()
+  const [isCreating, setIsCreating] = useState(false)
+  const [complaint, setComplaint] = useState('')
+  const [error, setError] = useState<string | null>(null)
+
+  if (!appointment) return null
+
+  const handleCreateRecord = async () => {
+    if (complaint.trim().length < 5) {
+      setError('A queixa principal deve ter pelo menos 5 caracteres')
+      return
+    }
+    setError(null)
+    try {
+      const rec = await createRecord.mutateAsync({
+        appointment_id: appointment.id,
+        chief_complaint: complaint,
+      })
+      onClose()
+      navigate(`/records/${rec.id}`)
+    } catch (err) {
+      setError(getErrorMessage(err))
+    }
+  }
+
+  return (
+    <Modal
+      open={open}
+      onClose={() => { setIsCreating(false); setComplaint(''); onClose(); }}
+      title="Detalhes da Consulta"
+      size="lg"
+      footer={
+        <>
+          <Button variant="ghost" onClick={onClose}>Fechar</Button>
+          {!isCreating && appointment.status !== 'CANCELLED' && (
+            <Button
+              icon={<FileText className="w-4 h-4" />}
+              onClick={() => setIsCreating(true)}
+            >
+              Criar Prontuário
+            </Button>
+          )}
+        </>
+      }
+    >
+      <div className="space-y-4">
+        {error && <Alert variant="error">{error}</Alert>}
+        <div className="grid grid-cols-2 gap-4 text-sm text-slate-300 bg-slate-900 p-4 rounded-xl border border-slate-800">
+          <div>
+            <span className="block text-slate-500 mb-1 text-xs">Horário</span>
+            <span className="font-medium">{formatDateTime(appointment.scheduled_at)}</span>
+          </div>
+          <div>
+            <span className="block text-slate-500 mb-1 text-xs">Status</span>
+            <Badge className={STATUS_COLORS[appointment.status]}>{STATUS_LABELS[appointment.status]}</Badge>
+          </div>
+          <div>
+            <span className="block text-slate-500 mb-1 text-xs">Tipo</span>
+            {TYPE_LABELS[appointment.appointment_type]}
+          </div>
+          <div>
+            <span className="block text-slate-500 mb-1 text-xs">Especialidade</span>
+            {appointment.specialty || '—'}
+          </div>
+          {appointment.notes && (
+            <div className="col-span-2">
+              <span className="block text-slate-500 mb-1 text-xs">Observações do Agendamento</span>
+              <p className="bg-slate-950 p-3 rounded-lg border border-slate-800">{appointment.notes}</p>
+            </div>
+          )}
+        </div>
+
+        {isCreating && (
+          <div className="pt-4 border-t border-slate-800 space-y-4 animate-in fade-in slide-in-from-top-4">
+            <h4 className="font-semibold text-slate-200">Novo Prontuário</h4>
+            <Input
+              label="Queixa Principal *"
+              placeholder="Descreva o motivo principal do atendimento..."
+              value={complaint}
+              onChange={(e) => setComplaint(e.target.value)}
+            />
+            <div className="flex justify-end gap-2">
+              <Button variant="ghost" onClick={() => setIsCreating(false)}>Cancelar</Button>
+              <Button onClick={handleCreateRecord} loading={createRecord.isPending}>
+                Salvar Prontuário
+              </Button>
+            </div>
+          </div>
+        )}
+      </div>
+    </Modal>
+  )
+}
+
 // ─── Appointment Row ──────────────────────────────────────────────────────
 function AppointmentRow({
   appt,
   canCancel,
   onCancel,
   onConfirm,
+  onDetails,
 }: {
   appt: Appointment
   canCancel: boolean
   onCancel: (appt: Appointment) => void
   onConfirm: (appt: Appointment) => void
+  onDetails: (appt: Appointment) => void
 }) {
   return (
     <tr className="hover:bg-slate-800/20 transition-colors">
@@ -215,6 +323,14 @@ function AppointmentRow({
       </Td>
       <Td>
         <div className="flex items-center gap-2 justify-end">
+          <Button
+            variant="ghost"
+            size="sm"
+            icon={<Eye className="w-3.5 h-3.5 text-slate-400" />}
+            onClick={() => onDetails(appt)}
+          >
+            Detalhes
+          </Button>
           {appt.status === 'SCHEDULED' && (
             <Button
               variant="ghost"
@@ -248,6 +364,7 @@ export function AppointmentsPage() {
   const [statusFilter, setStatusFilter] = useState('')
   const [createOpen, setCreateOpen] = useState(false)
   const [cancelTarget, setCancelTarget] = useState<Appointment | null>(null)
+  const [detailsTarget, setDetailsTarget] = useState<Appointment | null>(null)
 
   const { role } = useAuthStore()
   const canCreate = role === 'ADMIN' || role === 'ATTENDANT' || role === 'PATIENT'
@@ -346,6 +463,7 @@ export function AppointmentsPage() {
                     canCancel={canCancel}
                     onCancel={setCancelTarget}
                     onConfirm={handleConfirm}
+                    onDetails={setDetailsTarget}
                   />
                 ))}
               </tbody>
@@ -360,6 +478,11 @@ export function AppointmentsPage() {
         appointment={cancelTarget}
         open={!!cancelTarget}
         onClose={() => setCancelTarget(null)}
+      />
+      <ConsultationDetailsModal
+        appointment={detailsTarget}
+        open={!!detailsTarget}
+        onClose={() => setDetailsTarget(null)}
       />
     </div>
   )
