@@ -192,6 +192,7 @@ function ConsultationDetailsModal({
   appointment: Appointment | null
   open: boolean
   onClose: () => void
+  canCreateRecord: boolean
 }) {
   const navigate = useNavigate()
   const createRecord = useCreateRecord()
@@ -247,7 +248,7 @@ function ConsultationDetailsModal({
       footer={
         <>
           <Button variant="ghost" onClick={onClose}>Fechar</Button>
-          {!isCreating && appointment.status !== 'CANCELLED' && (
+          {canCreateRecord && !isCreating && appointment.status !== 'CANCELLED' && (
             <Button
               icon={<FileText className="w-4 h-4" />}
               onClick={() => setIsCreating(true)}
@@ -347,6 +348,7 @@ function AppointmentRow({
   onDetails,
 }: {
   appt: Appointment
+  canConfirm: boolean
   canCancel: boolean
   onCancel: (appt: Appointment) => void
   onConfirm: (appt: Appointment) => void
@@ -384,7 +386,7 @@ function AppointmentRow({
           >
             Detalhes
           </Button>
-          {appt.status === 'SCHEDULED' && (
+          {canConfirm && appt.status === 'SCHEDULED' && (
             <Button
               variant="ghost"
               size="sm"
@@ -423,6 +425,7 @@ export function AppointmentsPage() {
   const { role } = useAuthStore()
   const canCreate = role === 'ADMIN' || role === 'ATTENDANT' || role === 'PATIENT'
   const canCancel = true // all roles can cancel (business rules enforced backend-side)
+  const canConfirm = role !== 'PATIENT'
 
   const confirm = useConfirmAppointment()
 
@@ -527,6 +530,7 @@ export function AppointmentsPage() {
                   <AppointmentRow
                     key={appt.id}
                     appt={appt}
+                    canConfirm={canConfirm}
                     canCancel={canCancel}
                     onCancel={setCancelTarget}
                     onConfirm={handleConfirm}
@@ -550,6 +554,7 @@ export function AppointmentsPage() {
         appointment={detailsTarget}
         open={!!detailsTarget}
         onClose={() => setDetailsTarget(null)}
+        canCreateRecord={role !== 'PATIENT'}
       />
     </div>
   )
