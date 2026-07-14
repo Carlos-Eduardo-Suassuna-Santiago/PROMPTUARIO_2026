@@ -9,7 +9,7 @@ import {
   ClipboardList, AlertTriangle,
 } from 'lucide-react'
 import {
-  usePatientRecords, useRecord, useCreateRecord,
+  usePatientRecords, useRecords, useRecord, useCreateRecord,
   useCreatePrescription, useRecordAnalyses, useRequestAnalysis,
   useAppointments,
 } from '@/hooks'
@@ -19,7 +19,7 @@ import {
   Badge, PageLoader, EmptyState, Modal, Alert, Table, Th, Td, Spinner,
 } from '@/components/ui'
 import { formatDate, formatDateTime, formatRelative, RISK_COLORS, getErrorMessage, cn } from '@/utils'
-import { useIsDoctor, useAuthStore } from '@/store/auth.store'
+import { useIsDoctor, useIsPatient, useAuthStore } from '@/store/auth.store'
 import { recordsApi } from '@/api/services'
 import type { MedicalRecord } from '@/types'
 
@@ -495,6 +495,7 @@ export function RecordsPage() {
   const { patientId, recordId } = useParams<{ patientId?: string; recordId?: string }>()
   const [createModal, setCreateModal] = useState(false)
   const isDoctor = useIsDoctor()
+  const isPatient = useIsPatient()
   const navigate = useNavigate()
   const { user } = useAuthStore()
 
@@ -520,8 +521,12 @@ export function RecordsPage() {
   }
 
   // If viewing records for a patient
-  const pid = patientId || user?.id || ''
-  const { data: records, isLoading } = usePatientRecords(pid)
+  const pid = patientId || (isPatient ? user?.id : '')
+  const { data: recordsByPatient, isLoading: loadingPatient } = usePatientRecords(pid || '')
+  const { data: allRecords, isLoading: loadingAll } = useRecords()
+
+  const records = pid ? recordsByPatient : allRecords
+  const isLoading = pid ? loadingPatient : loadingAll
 
   return (
     <div>

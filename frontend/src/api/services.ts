@@ -151,6 +151,11 @@ export const appointmentsApi = {
 
 // ─── Medical Records ────────────────────────────────────────────────────────
 export const recordsApi = {
+  list: (params?: { page?: number; size?: number }) =>
+    api.get<{ items: MedicalRecord[]; total: number; page: number; size: number }>(
+      '/records', { params }
+    ).then(r => r.data),
+
   listByPatient: (patientId: string, params?: { page?: number; size?: number }) =>
     api.get<{ items: MedicalRecord[]; total: number; page: number; size: number }>(
       `/records/patient/${patientId}`,

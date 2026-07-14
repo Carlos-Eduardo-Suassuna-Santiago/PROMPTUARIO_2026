@@ -269,6 +269,13 @@ export function usePatientRecords(patientId: string) {
   })
 }
 
+export function useRecords() {
+  return useQuery({
+    queryKey: keys.records.all,
+    queryFn: () => recordsApi.list(),
+  })
+}
+
 export function useRecord(id: string) {
   return useQuery({
     queryKey: keys.records.detail(id),

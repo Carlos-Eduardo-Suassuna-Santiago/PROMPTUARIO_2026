@@ -118,6 +118,21 @@ class MedicalRecordRepository:
         )
         return list(result.scalars().all()), total
 
+    async def list_records(self, doctor_id: str | None, page: int, size: int) -> tuple[list[MedicalRecord], int]:
+        query = select(MedicalRecord)
+        if doctor_id:
+            query = query.where(MedicalRecord.doctor_id == doctor_id)
+        
+        total_query = select(func.count()).select_from(MedicalRecord)
+        if doctor_id:
+            total_query = total_query.where(MedicalRecord.doctor_id == doctor_id)
+
+        total = await self.session.scalar(total_query) or 0
+        result = await self.session.execute(
+            query.order_by(MedicalRecord.created_at.desc()).offset((page - 1) * size).limit(size)
+        )
+        return list(result.scalars().all()), total
+
     async def create(self, record: MedicalRecord) -> MedicalRecord:
         self.session.add(record)
         await self.session.flush()

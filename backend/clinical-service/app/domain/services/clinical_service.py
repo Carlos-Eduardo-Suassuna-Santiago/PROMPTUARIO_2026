@@ -503,8 +503,11 @@ class MedicalRecordService:
             "reason": "Integridade confirmada" if verified else "O conteúdo foi alterado após a assinatura",
         }
 
-    async def list_by_patient(self, patient_id: str, page: int, size: int):
+    async def list_by_patient(self, patient_id: str, page: int, size: int) -> tuple[list[MedicalRecord], int]:
         return await self.repo.list_by_patient(patient_id, page, size)
+
+    async def list_records(self, doctor_id: str | None, page: int, size: int) -> tuple[list[MedicalRecord], int]:
+        return await self.repo.list_records(doctor_id, page, size)
 
 
 class PrescriptionService:

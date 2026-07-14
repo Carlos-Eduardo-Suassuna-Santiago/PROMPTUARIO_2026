@@ -219,6 +219,23 @@ async def get_record_history(record_id: str, request: Request):
         return [MedicalRecordHistoryResponse.model_validate(h) for h in record.history]
 
 
+@records_router.get("", response_model=dict)
+async def list_records(
+    request: Request,
+    user=Depends(require_roles("DOCTOR", "ADMIN")),
+    page: int = Query(1, ge=1),
+    size: int = Query(20, ge=1, le=50),
+):
+    async with _sf(request)() as session:
+        svc = MedicalRecordService(session, _pub(request))
+        doctor_id = user.sub if user.role == "DOCTOR" else None
+        items, total = await svc.list_records(doctor_id, page, size)
+        return {
+            "items": [MedicalRecordResponse.model_validate(r) for r in items],
+            "total": total, "page": page, "size": size,
+        }
+
+
 @records_router.get("/patient/{patient_id}", response_model=dict)
 async def list_patient_records(
     patient_id: str, request: Request,
