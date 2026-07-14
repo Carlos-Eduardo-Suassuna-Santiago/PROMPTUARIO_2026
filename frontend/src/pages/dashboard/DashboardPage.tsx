@@ -9,7 +9,7 @@ import {
   ResponsiveContainer, BarChart, Bar, CartesianGrid,
 } from 'recharts'
 import { useAuthStore, useIsDoctor, useIsAdmin, useIsPatient } from '@/store/auth.store'
-import { useDashboardSummary, useAppointments, usePatients, useRecords } from '@/hooks'
+import { useDashboardSummary, useAppointments, usePatients, useRecords, useConfirmAppointment } from '@/hooks'
 import { PageHeader } from '@/components/layout/AppShell'
 import {
   StatCard, Card, CardHeader, CardBody,
@@ -69,6 +69,7 @@ function AdminDoctorDashboard() {
     page: 1, size: 1, from_date: todayDate, to_date: todayDate
   })
   const { data: records, isLoading: recordsLoading } = useRecords()
+  const confirmMutation = useConfirmAppointment()
 
   return (
     <div className="space-y-8">
@@ -207,9 +208,21 @@ function AdminDoctorDashboard() {
                       </p>
                     </div>
                   </div>
-                  <Badge className={STATUS_COLORS[appt.status]}>
-                    {STATUS_LABELS[appt.status]}
-                  </Badge>
+                  <div className="flex items-center gap-4">
+                    <Badge className={STATUS_COLORS[appt.status]}>
+                      {STATUS_LABELS[appt.status]}
+                    </Badge>
+                    {appt.status === 'SCHEDULED' && (
+                      <button
+                        onClick={() => confirmMutation.mutate(appt.id)}
+                        disabled={confirmMutation.isPending}
+                        className="text-emerald-500 hover:text-emerald-400 disabled:opacity-50 transition-colors p-1"
+                        title="Confirmar Consulta"
+                      >
+                        <CheckCircle className="w-4 h-4" />
+                      </button>
+                    )}
+                  </div>
                 </div>
               ))}
             </div>
