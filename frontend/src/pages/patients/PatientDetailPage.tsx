@@ -255,9 +255,6 @@ export function PatientDetailPage() {
     { key: 'allergies', label: 'Alergias', icon: <AlertTriangle className="w-3.5 h-3.5" />, count: allergies?.length },
     { key: 'vaccines', label: 'Vacinas', icon: <Syringe className="w-3.5 h-3.5" />, count: vaccines?.length },
     { key: 'medications', label: 'Medicamentos', icon: <Pill className="w-3.5 h-3.5" />, count: medications?.length },
-    { key: 'appointments', label: 'Consultas', icon: <Calendar className="w-3.5 h-3.5" />, count: appointments?.total },
-    { key: 'records', label: 'Prontuários', icon: <FileText className="w-3.5 h-3.5" />, count: records?.items?.length },
-    { key: 'documents', label: 'Documentos', icon: <FileText className="w-3.5 h-3.5" />, count: documents.length },
   ]
 
   return (
