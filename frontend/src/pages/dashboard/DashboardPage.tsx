@@ -62,7 +62,7 @@ function CustomTooltip({ active, payload, label }: any) {
 function AdminDoctorDashboard() {
   const { data: summary, isLoading: summaryLoading } = useDashboardSummary()
   const { data: appointments, isLoading: apptLoading } = useAppointments({
-    page: 1, size: 5, status: 'SCHEDULED',
+    page: 1, size: 5, status: 'SCHEDULED', sort_dir: 'asc'
   })
 
   return (
@@ -218,7 +218,7 @@ function AdminDoctorDashboard() {
 // Patient dashboard — simplified view
 function PatientDashboard() {
   const { user } = useAuthStore()
-  const { data: appointments } = useAppointments({ page: 1, size: 3 })
+  const { data: appointments } = useAppointments({ page: 1, size: 3, sort_dir: 'asc' })
 
   return (
     <div className="space-y-6">

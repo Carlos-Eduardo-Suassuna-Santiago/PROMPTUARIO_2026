@@ -445,6 +445,7 @@ export function AppointmentsPage() {
     size: 20,
     status: statusFilter || undefined,
     patient_name: patientNameFilter || undefined,
+    sort_dir: 'asc'
   })
 
   const handleConfirm = async (appt: Appointment) => {

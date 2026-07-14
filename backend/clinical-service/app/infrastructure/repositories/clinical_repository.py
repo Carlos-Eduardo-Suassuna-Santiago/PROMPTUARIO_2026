@@ -34,6 +34,7 @@ class AppointmentRepository:
         from_date: date | None = None,
         to_date: date | None = None,
         patient_name: str | None = None,
+        sort_dir: str = "desc",
     ) -> tuple[list[Appointment], int]:
         q = select(Appointment)
         cq = select(func.count()).select_from(Appointment)
@@ -59,9 +60,14 @@ class AppointmentRepository:
             q = q.where(and_(*filters))
             cq = cq.where(and_(*filters))
         total = await self.session.scalar(cq) or 0
+        
+        if sort_dir.lower() == "asc":
+            q = q.order_by(Appointment.scheduled_at.asc())
+        else:
+            q = q.order_by(Appointment.scheduled_at.desc())
+            
         result = await self.session.execute(
-            q.order_by(Appointment.scheduled_at.desc())
-            .offset((page - 1) * size).limit(size)
+            q.offset((page - 1) * size).limit(size)
         )
         return list(result.scalars().all()), total
 

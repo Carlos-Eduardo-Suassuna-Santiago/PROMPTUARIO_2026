@@ -317,8 +317,8 @@ class AppointmentService:
             raise HTTPException(status_code=404, detail="Consulta não encontrada")
         return appt
 
-    async def list_appointments(self, page, size, patient_id, doctor_id, appt_status, from_date, to_date, patient_name=None):
-        return await self.repo.list_appointments(page, size, patient_id, doctor_id, appt_status, from_date, to_date, patient_name)
+    async def list_appointments(self, page, size, patient_id, doctor_id, appt_status, from_date, to_date, patient_name=None, sort_dir="desc"):
+        return await self.repo.list_appointments(page, size, patient_id, doctor_id, appt_status, from_date, to_date, patient_name, sort_dir)
 
     async def cancel(self, appt_id: str, body: AppointmentCancelRequest, cancelled_by: str, user_role: str) -> Appointment:
         appt = await self.get(appt_id)

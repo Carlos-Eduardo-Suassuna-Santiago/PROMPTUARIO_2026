@@ -57,17 +57,18 @@ async def list_appointments(
     from_date: Optional[date] = Query(None),
     to_date: Optional[date] = Query(None),
     patient_name: Optional[str] = Query(None),
+    sort_dir: str = Query("desc"),
 ):
-    # Restrict patients to their own appointments
-    if user.role == "PATIENT":
-        patient_id = user.sub
-    # Doctors by default see their own appointments, but can see a specific patient's full history
-    if user.role == "DOCTOR" and not patient_id:
-        doctor_id = user.sub
-
     async with _sf(request)() as session:
         svc = AppointmentService(session, _pub(request))
-        items, total = await svc.list_appointments(page, size, patient_id, doctor_id, appt_status, from_date, to_date, patient_name)
+        
+        # User role scoping
+        if user.role == "PATIENT":
+            patient_id = user.sub
+        elif user.role == "DOCTOR" and not patient_id:
+            doctor_id = user.sub
+
+        items, total = await svc.list_appointments(page, size, patient_id, doctor_id, appt_status, from_date, to_date, patient_name, sort_dir)
         
         # Obter nomes dos pacientes
         p_ids = list({a.patient_id for a in items})
