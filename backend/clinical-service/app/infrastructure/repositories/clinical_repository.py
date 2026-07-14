@@ -112,6 +112,11 @@ class MedicalRecordRepository:
         ) or 0
         result = await self.session.execute(
             select(MedicalRecord)
+            .options(
+                selectinload(MedicalRecord.prescriptions),
+                selectinload(MedicalRecord.exam_requests),
+                selectinload(MedicalRecord.history),
+            )
             .where(MedicalRecord.patient_id == patient_id)
             .order_by(MedicalRecord.created_at.desc())
             .offset((page - 1) * size).limit(size)
@@ -128,6 +133,12 @@ class MedicalRecordRepository:
             total_query = total_query.where(MedicalRecord.doctor_id == doctor_id)
 
         total = await self.session.scalar(total_query) or 0
+        query = query.options(
+            selectinload(MedicalRecord.prescriptions),
+            selectinload(MedicalRecord.exam_requests),
+            selectinload(MedicalRecord.history),
+        )
+
         result = await self.session.execute(
             query.order_by(MedicalRecord.created_at.desc()).offset((page - 1) * size).limit(size)
         )
