@@ -69,8 +69,11 @@ export const usersApi = {
   assignRole: (id: string, role: string) =>
     api.put<User>(`/users/${id}/role`, { role }).then(r => r.data),
 
-  deactivate: (id: string, reason: string) =>
-    api.delete(`/users/${id}`, { data: { reason } }),
+  deactivateUser: (userId: string, reason: string) =>
+    api.delete(`/users/${userId}`, { data: { reason } }).then(r => r.data),
+
+  reactivateUser: (userId: string) =>
+    api.post(`/users/${userId}/reactivate`).then(r => r.data),
 
   // Doctors listing — accessible for patients
   listDoctors: () =>
@@ -238,6 +241,19 @@ export const auditApi = {
   }) => api.get<{ items: Record<string, unknown>[]; total: number; page: number; size: number }>(
     '/audit/logs', { params }
   ).then(r => r.data),
+
+  exportLogs: async (params?: {
+    service?: string; table_name?: string; operation?: string;
+  }) => {
+    const response = await api.get('/audit/export', { params, responseType: 'blob' })
+    const url = window.URL.createObjectURL(new Blob([response.data]))
+    const link = document.createElement('a')
+    link.href = url
+    link.setAttribute('download', `audit_report_${new Date().toISOString().slice(0, 10)}.csv`)
+    document.body.appendChild(link)
+    link.click()
+    link.remove()
+  },
 
   summary: (params?: { from_date?: string; to_date?: string }) =>
     api.get<{

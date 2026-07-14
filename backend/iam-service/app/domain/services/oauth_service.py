@@ -170,7 +170,7 @@ class OAuthService:
     async def _issue_tokens_for_user(self, user: User) -> dict:
         """Reutiliza _issue_tokens do AuthService para emitir os mesmos tokens JWT."""
         auth_svc = AuthService(self.session, self.publisher, self.redis)
-        return await auth_svc._issue_tokens(user)
+        return await auth_svc._issue_tokens(user, log_login=True)
 
     async def list_accounts(self, user_id: str) -> list[dict]:
         accounts = await self._oauth_repo.list_by_user(user_id)

@@ -3,7 +3,7 @@ import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { Shield, Plus, UserX, Edit2, RefreshCw, Search } from 'lucide-react'
-import { useUsers, useCreateUser, useDeactivateUser } from '@/hooks'
+import { useUsers, useCreateUser, useDeactivateUser, useReactivateUser } from '@/hooks'
 import { usersApi } from '@/api/services'
 import { PageHeader } from '@/components/layout/AppShell'
 import {
@@ -226,9 +226,17 @@ function UserRow({
   user: User
   currentUserId: string
   onDeactivate: (u: User) => void
+  onReactivate: (u: User) => void
   onEditRole: (u: User) => void
 }) {
   const isSelf = user.id === currentUserId
+  const reactivate = useReactivateUser()
+
+  const handleReactivateClick = async () => {
+    if (confirm('Deseja realmente reativar este usuário?')) {
+      await reactivate.mutateAsync(user.id)
+    }
+  }
 
   return (
     <tr className="hover:bg-slate-800/20 transition-colors">
@@ -281,6 +289,17 @@ function UserRow({
               onClick={() => onDeactivate(user)}
             >
               Desativar
+            </Button>
+          )}
+          {!user.is_active && !isSelf && (
+            <Button
+              size="sm"
+              variant="outline"
+              icon={<RefreshCw className="w-3.5 h-3.5" />}
+              onClick={handleReactivateClick}
+              loading={reactivate.isPending}
+            >
+              Ativar
             </Button>
           )}
         </div>
@@ -399,6 +418,7 @@ export function UserManagementPage() {
                     user={u}
                     currentUserId={currentUser?.id ?? ''}
                     onDeactivate={setDeactivateTarget}
+                    onReactivate={() => {}}
                     onEditRole={setEditRoleTarget}
                   />
                 ))}

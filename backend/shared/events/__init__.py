@@ -64,6 +64,15 @@ class UserDeactivatedEvent(DomainEvent):
     EXCHANGE: ClassVar[str] = "promptuario.iam"
 
 
+class UserReactivatedEvent(DomainEvent):
+    event_type: str = "UserReactivated"
+    user_id: str
+    reactivated_by: str
+
+    ROUTING_KEY: ClassVar[str] = "iam.user.reactivated"
+    EXCHANGE: ClassVar[str] = "promptuario.iam"
+
+
 class UserUpdatedEvent(DomainEvent):
     event_type: str = "UserUpdated"
     user_id: str

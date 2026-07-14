@@ -840,6 +840,8 @@ async def get_audit_logs(
     services = [service] if service and service != "all" else list(db_urls.keys())
     all_logs: list[dict] = []
 
+    global_total = 0
+
     for svc in services:
         if svc not in db_urls:
             continue
@@ -873,13 +875,19 @@ async def get_audit_logs(
                         pass
 
                 where = " AND ".join(conditions)
-                offset = (page - 1) * size
+                
+                # Count total
+                count_row = await conn.fetchrow(f"SELECT COUNT(*) FROM audit_logs WHERE {where}", *values)
+                global_total += dict(count_row)["count"] if count_row else 0
 
+                # Fetch up to offset+size to merge properly
+                offset = (page - 1) * size
+                limit = offset + size
                 rows = await conn.fetch(
                     f"SELECT * FROM audit_logs WHERE {where} "
                     f"ORDER BY timestamp DESC "
-                    f"LIMIT ${len(values)+1} OFFSET ${len(values)+2}",
-                    *values, size, offset,
+                    f"LIMIT ${len(values)+1}",
+                    *values, limit,
                 )
                 all_logs.extend([dict(r) for r in rows])
             finally:
@@ -888,7 +896,106 @@ async def get_audit_logs(
             logger.warning("Erro ao consultar audit_logs de %s: %s", svc, exc)
 
     all_logs.sort(key=lambda x: str(x.get("timestamp", "")), reverse=True)
-    return {"items": all_logs[:size], "total": len(all_logs), "page": page, "size": size}
+    offset = (page - 1) * size
+    
+    return {"items": all_logs[offset : offset + size], "total": global_total, "page": page, "size": size}
+
+@audit_cross_router.get(
+    "/export",
+    summary="Exportar logs de auditoria (CSV)",
+    dependencies=[Depends(require_roles("ADMIN"))],
+)
+@audit_cross_router.get(
+    "/cross/export",
+    summary="Exportar logs de auditoria (CSV)",
+    dependencies=[Depends(require_roles("ADMIN"))],
+)
+async def export_audit_logs(
+    service: Optional[str] = Query(None, description="iam | patient | clinical | all"),
+    table_name: Optional[str] = Query(None),
+    operation: Optional[str] = Query(None),
+    user_id: Optional[str] = Query(None),
+    from_date: Optional[str] = Query(None),
+    to_date: Optional[str] = Query(None),
+):
+    import io
+    import csv
+    from fastapi.responses import StreamingResponse
+
+    db_urls = _get_db_urls()
+    services = [service] if service and service != "all" else list(db_urls.keys())
+    all_logs: list[dict] = []
+
+    for svc in services:
+        if svc not in db_urls:
+            continue
+        try:
+            conn = await asyncpg.connect(db_urls[svc])
+            try:
+                conditions = ["1=1"]
+                values: list = []
+                if table_name:
+                    conditions.append(f"table_name = ${len(values)+1}")
+                    values.append(table_name)
+                if operation:
+                    conditions.append(f"operation = ${len(values)+1}")
+                    values.append(operation)
+                if user_id:
+                    conditions.append(f"user_id = ${len(values)+1}")
+                    values.append(user_id)
+                if from_date:
+                    try:
+                        dt_from = datetime.strptime(from_date[:10], "%Y-%m-%d").date()
+                        conditions.append(f"timestamp::date >= ${len(values)+1}")
+                        values.append(dt_from)
+                    except ValueError:
+                        pass
+                if to_date:
+                    try:
+                        dt_to = datetime.strptime(to_date[:10], "%Y-%m-%d").date()
+                        conditions.append(f"timestamp::date <= ${len(values)+1}")
+                        values.append(dt_to)
+                    except ValueError:
+                        pass
+
+                where = " AND ".join(conditions)
+                
+                # Fetch up to 10000 logs for export
+                limit = 10000
+                rows = await conn.fetch(
+                    f"SELECT * FROM audit_logs WHERE {where} "
+                    f"ORDER BY timestamp DESC LIMIT ${len(values)+1}",
+                    *values, limit,
+                )
+                all_logs.extend([dict(r) for r in rows])
+            finally:
+                await conn.close()
+        except Exception as exc:
+            logger.warning("Erro ao exportar audit_logs de %s: %s", svc, exc)
+
+    all_logs.sort(key=lambda x: str(x.get("timestamp", "")), reverse=True)
+    
+    output = io.StringIO()
+    writer = csv.writer(output, delimiter=",", quoting=csv.QUOTE_MINIMAL)
+    writer.writerow(["Data/Hora", "Serviço", "Operação", "Tabela", "ID Registro", "Usuário", "E-mail", "Endereço IP"])
+    for log in all_logs[:10000]:
+        writer.writerow([
+            log.get("timestamp", ""),
+            log.get("service_name", ""),
+            log.get("operation", ""),
+            log.get("table_name", ""),
+            log.get("record_id", ""),
+            log.get("user_id", ""),
+            log.get("user_email", ""),
+            log.get("ip_address", "")
+        ])
+
+    output.seek(0)
+    return StreamingResponse(
+        iter([output.getvalue()]),
+        media_type="text/csv",
+        headers={"Content-Disposition": f"attachment; filename=audit_report_{datetime.now().strftime('%Y%m%d%H%M')}.csv"}
+    )
 
 
 @audit_cross_router.get(

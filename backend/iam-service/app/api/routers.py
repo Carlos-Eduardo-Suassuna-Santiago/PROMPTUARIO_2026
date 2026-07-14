@@ -254,8 +254,8 @@ async def assign_role(user_id: str, body: AssignRoleRequest, request: Request):
 
 @users_router.delete(
     "/{user_id}",
+    summary="Desativar um usuário",
     status_code=status.HTTP_204_NO_CONTENT,
-    summary="Desativar usuário",
     dependencies=[Depends(require_roles("ADMIN"))],
 )
 async def deactivate_user(
@@ -264,7 +264,22 @@ async def deactivate_user(
     request: Request,
     current_user=Depends(get_current_user),
 ):
-    sf, pub, _ = _get_services(request)
-    async with sf() as session:
-        svc = UserService(session, pub)
+    async with _sf(request)() as session:
+        svc = AuthService(session, request.app.state.redis, request.app.state.event_broker)
         await svc.deactivate_user(user_id, body.reason, current_user.sub)
+
+
+@users_router.post(
+    "/{user_id}/reactivate",
+    summary="Reativar um usuário",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(require_roles("ADMIN"))],
+)
+async def reactivate_user(
+    user_id: str,
+    request: Request,
+    current_user=Depends(get_current_user),
+):
+    async with _sf(request)() as session:
+        svc = AuthService(session, request.app.state.redis, request.app.state.event_broker)
+        await svc.reactivate_user(user_id, current_user.sub)

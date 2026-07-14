@@ -17,7 +17,7 @@ from app.infrastructure.repositories.user_repository import (
     RefreshTokenRepository,
     UserRepository,
 )
-from shared.events import UserCreatedEvent, UserDeactivatedEvent, UserUpdatedEvent
+from shared.events import UserCreatedEvent, UserDeactivatedEvent, UserReactivatedEvent, UserUpdatedEvent
 from shared.events.broker import EventPublisher
 from shared.metrics import login_attempts_total, users_registered_total, active_users
 from shared.audit import log_operation
@@ -77,49 +77,9 @@ class AuthService:
         ).inc()
         active_users.labels(service=_settings.SERVICE_NAME).inc()
 
-        access_token = create_access_token(
-            user_id=user.id,
-            role=user.role,
-            email=user.email,
-            secret=settings.JWT_SECRET_KEY,
-            algorithm=settings.JWT_ALGORITHM,
-            expire_minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES,
-        )
-        refresh_token_str = create_refresh_token(
-            user_id=user.id,
-            secret=settings.JWT_SECRET_KEY,
-            algorithm=settings.JWT_ALGORITHM,
-            expire_days=settings.REFRESH_TOKEN_EXPIRE_DAYS,
-        )
+        return await self._issue_tokens(user, log_login=True)
 
-        # Persist hashed refresh token
-        rt = RefreshToken(
-            id=str(uuid.uuid4()),
-            user_id=user.id,
-            token_hash=hashlib.sha256(refresh_token_str.encode()).hexdigest(),
-            expires_at=datetime.now(timezone.utc)
-            + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS),
-        )
-        await self.token_repo.save(rt)
-        await log_operation(
-            self.session,
-            service="iam-service",
-            table="sessions",
-            operation="AUTH_LOGIN",
-            record_id=user.id,
-            user_id=user.id,
-            user_role=user.role,
-            user_email=user.email,
-            ip_address=getattr(self, "_ip_address", None),
-        )
-        await self.session.commit()
 
-        return {
-            "access_token": access_token,
-            "refresh_token": refresh_token_str,
-            "token_type": "bearer",
-            "expires_in": settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
-        }
 
     async def refresh(self, refresh_token: str) -> dict:
         rt = await self.token_repo.get_valid(refresh_token)
@@ -147,7 +107,7 @@ class AuthService:
 
         return await self._issue_tokens(user)
 
-    async def _issue_tokens(self, user: User) -> dict:
+    async def _issue_tokens(self, user: User, log_login: bool = False) -> dict:
         access_token = create_access_token(
             user_id=user.id,
             role=user.role,
@@ -170,6 +130,20 @@ class AuthService:
             + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS),
         )
         await self.token_repo.save(rt)
+        
+        if log_login:
+            await log_operation(
+                self.session,
+                service="iam-service",
+                table="sessions",
+                operation="AUTH_LOGIN",
+                record_id=user.id,
+                user_id=user.id,
+                user_role=user.role,
+                user_email=user.email,
+                ip_address=getattr(self, "_ip_address", None),
+            )
+            
         await self.session.commit()
         return {
             "access_token": access_token,
@@ -499,5 +473,44 @@ class UserService:
                 user_id=user_id,
                 reason=reason,
                 deactivated_by=deactivated_by,
+            )
+        )
+
+    async def reactivate_user(
+        self, user_id: str, reactivated_by: str
+    ) -> None:
+        user = await self.user_repo.get_by_id(user_id)
+        if not user:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Usuário não encontrado")
+        
+        user.deactivated_at = None
+        await self.user_repo.update(user)
+
+        # enable in cognito if cogito is used
+        try:
+            from shared.utils.security import cognito_client
+            cognito_client.admin_enable_user(
+                UserPoolId=settings.AWS_COGNITO_USER_POOL_ID,
+                Username=user.email,
+            )
+        except Exception as e:
+            logger.warning("Falha ao reativar usuário no Cognito: %s", e)
+
+        await log_operation(
+            self.session,
+            service="iam-service",
+            table="users",
+            operation="REACTIVATE",
+            record_id=user.id,
+            user_id=reactivated_by,
+            old_values={"deactivated": True},
+            new_values={"deactivated": False},
+        )
+        await self.session.commit()
+
+        await self.event_broker.publish(
+            UserReactivatedEvent(
+                user_id=user.id,
+                reactivated_by=reactivated_by,
             )
         )

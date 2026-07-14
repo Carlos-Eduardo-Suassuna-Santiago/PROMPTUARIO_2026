@@ -253,9 +253,21 @@ function LogsTab() {
     }),
   })
 
+  const handleExport = async () => {
+    try {
+      await auditApi.exportLogs({
+        service: serviceFilter || undefined,
+        operation: operationFilter || undefined,
+        table_name: tableFilter || undefined,
+      })
+    } catch (err) {
+      console.error('Failed to export', err)
+    }
+  }
+
   return (
     <div>
-      <div className="flex flex-wrap gap-3 mb-4">
+      <div className="flex flex-wrap items-end gap-3 mb-4">
         <Select
           label="Serviço"
           options={[
@@ -285,6 +297,10 @@ function LogsTab() {
           onChange={(e) => { setTableFilter(e.target.value); setPage(1) }}
           className="w-48"
         />
+        <div className="flex-1" />
+        <Button variant="outline" icon={<FileText className="w-4 h-4" />} onClick={handleExport}>
+          Exportar (CSV)
+        </Button>
       </div>
 
       {isLoading ? (
