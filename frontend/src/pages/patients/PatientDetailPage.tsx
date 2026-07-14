@@ -245,7 +245,7 @@ export function PatientDetailPage() {
     { key: 'vaccines', label: 'Vacinas', icon: <Syringe className="w-3.5 h-3.5" />, count: vaccines?.length },
     { key: 'medications', label: 'Medicamentos', icon: <Pill className="w-3.5 h-3.5" />, count: medications?.length },
     { key: 'appointments', label: 'Consultas', icon: <Calendar className="w-3.5 h-3.5" />, count: appointments?.total },
-    { key: 'records', label: 'Prontuários', icon: <FileText className="w-3.5 h-3.5" />, count: records?.length },
+    { key: 'records', label: 'Prontuários', icon: <FileText className="w-3.5 h-3.5" />, count: records?.items?.length },
   ]
 
   return (
@@ -580,8 +580,10 @@ export function PatientDetailPage() {
 
       {tab === 'records' && (
         <Card className="mt-6 border-slate-700/50">
-          <CardHeader title="Prontuários do Paciente" />
-          {!records || records.length === 0 ? (
+          <CardHeader>
+            <h3 className="text-sm font-semibold text-slate-200">Prontuários do Paciente</h3>
+          </CardHeader>
+          {!records?.items || records.items.length === 0 ? (
             <EmptyState
               title="Nenhum prontuário"
               description="O paciente ainda não possui prontuários registrados."
@@ -598,7 +600,7 @@ export function PatientDetailPage() {
                 </tr>
               </thead>
               <tbody>
-                {records.map((r) => (
+                {records.items.map((r) => (
                   <tr key={r.id} className="hover:bg-slate-800/20 transition-colors">
                     <Td>{formatDateTime(r.created_at)}</Td>
                     <Td className="truncate max-w-[200px]">{r.chief_complaint}</Td>
