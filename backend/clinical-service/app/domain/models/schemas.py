@@ -57,6 +57,7 @@ class AppointmentCancelRequest(BaseModel):
 class AppointmentResponse(BaseModel):
     id: str
     patient_id: str
+    patient_name: str | None = None
     doctor_id: str
     scheduled_at: datetime
     appointment_type: str

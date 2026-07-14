@@ -65,8 +65,28 @@ async def list_appointments(
     async with _sf(request)() as session:
         svc = AppointmentService(session, _pub(request))
         items, total = await svc.list_appointments(page, size, patient_id, doctor_id, appt_status, from_date, to_date, patient_name)
+        
+        # Obter nomes dos pacientes
+        p_ids = list({a.patient_id for a in items})
+        p_names = {}
+        if p_ids:
+            from app.domain.models.clinical import PatientProjection
+            from sqlalchemy import select
+            res = await session.execute(
+                select(PatientProjection.user_id, PatientProjection.full_name)
+                .where(PatientProjection.user_id.in_(p_ids))
+            )
+            for row in res.all():
+                p_names[row.user_id] = row.full_name
+                
+        response_items = []
+        for a in items:
+            dto = AppointmentResponse.model_validate(a)
+            dto.patient_name = p_names.get(a.patient_id)
+            response_items.append(dto)
+
         return AppointmentListResponse(
-            items=[AppointmentResponse.model_validate(a) for a in items],
+            items=response_items,
             total=total, page=page, size=size,
         )
 

@@ -159,6 +159,7 @@ export type AppointmentStatus = 'SCHEDULED' | 'CONFIRMED' | 'COMPLETED' | 'CANCE
 export interface Appointment {
   id: string
   patient_id: string
+  patient_name?: string | null
   doctor_id: string
   scheduled_at: string
   appointment_type: AppointmentType
