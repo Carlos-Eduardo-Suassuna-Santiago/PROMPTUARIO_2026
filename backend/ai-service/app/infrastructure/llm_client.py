@@ -236,6 +236,13 @@ class LLMClient:
                 usage = data.get("usage", {})
                 self._last_prompt_tokens = usage.get("prompt_tokens", 0)
                 self._last_completion_tokens = usage.get("completion_tokens", 0)
+                
+                import re
+                match = re.search(r"```(?:json)?\s*(.*?)\s*```", content, re.DOTALL)
+                if match:
+                    content = match.group(1)
+                content = content.strip()
+                
                 return json.loads(content)
 
         return await _inner()

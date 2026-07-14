@@ -331,9 +331,6 @@ class AIService:
         return await self._call_llm(prompt, schema="drug_interaction")
 
     async def _analyze_symptoms(self, context: dict) -> dict:
-        chief_complaint = context.get("chief_complaint", "")
-        anamnesis = context.get("anamnesis", "")
-
         if not settings.LLM_API_KEY:
             return {
                 "risk_level": "MEDIUM",
@@ -343,7 +340,7 @@ class AIService:
                 "disclaimer": "Análise simulada — configure LLM_API_KEY para análise real",
             }
 
-        prompt = _build_symptom_prompt(chief_complaint, anamnesis)
+        prompt = _build_symptom_prompt(context)
         return await self._call_llm(prompt, schema="symptom_analysis")
 
     async def _generate_clinical_summary(self, context: dict) -> dict:
@@ -436,12 +433,12 @@ Retorne um JSON com o seguinte schema:
 """
 
 
-def _build_symptom_prompt(chief_complaint: str, anamnesis: str) -> str:
+def _build_symptom_prompt(context: dict) -> str:
+    import json
     return f"""
-Analise os sintomas clínicos e sugira diagnósticos diferenciais.
+Analise os sintomas clínicos e sugira diagnósticos diferenciais para o seguinte contexto:
 
-Queixa principal: {chief_complaint}
-Anamnese: {anamnesis}
+{json.dumps(context, indent=2, ensure_ascii=False)}
 
 Retorne um JSON com o seguinte schema:
 {{
