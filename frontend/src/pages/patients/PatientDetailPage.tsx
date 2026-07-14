@@ -5,13 +5,13 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import {
   ArrowLeft, UserRound, Phone, MapPin, Heart,
-  Syringe, Pill, Calendar, Plus, Trash2, AlertTriangle,
+  Syringe, Pill, Calendar, Plus, Trash2, AlertTriangle, FileText, Eye,
 } from 'lucide-react'
 import {
   usePatient, usePatientAllergies, usePatientVaccines,
   usePatientMedications, useAddAllergy, useDeleteAllergy,
   useAddVaccine, useAddMedication, useDeleteMedication,
-  useAppointments,
+  useAppointments, usePatientRecords,
 } from '@/hooks'
 import { PageHeader } from '@/components/layout/AppShell'
 import {
@@ -24,7 +24,7 @@ import {
 } from '@/utils'
 import { useIsDoctor, useIsAdmin, useIsAttendant } from '@/store/auth.store'
 
-type Tab = 'overview' | 'allergies' | 'vaccines' | 'medications' | 'appointments'
+type Tab = 'overview' | 'allergies' | 'vaccines' | 'medications' | 'appointments' | 'records'
 
 const medicationSchema = z.object({
   name: z.string().min(2, 'Nome do medicamento obrigatório'),
@@ -230,6 +230,7 @@ export function PatientDetailPage() {
   const { data: vaccines } = usePatientVaccines(id)
   const { data: medications } = usePatientMedications(id)
   const { data: appointments } = useAppointments({ patient_id: id, page: 1, size: 10 })
+  const { data: records } = usePatientRecords(id)
   const deleteAllergy = useDeleteAllergy()
   const deleteMedication = useDeleteMedication()
 
@@ -244,6 +245,7 @@ export function PatientDetailPage() {
     { key: 'vaccines', label: 'Vacinas', icon: <Syringe className="w-3.5 h-3.5" />, count: vaccines?.length },
     { key: 'medications', label: 'Medicamentos', icon: <Pill className="w-3.5 h-3.5" />, count: medications?.length },
     { key: 'appointments', label: 'Consultas', icon: <Calendar className="w-3.5 h-3.5" />, count: appointments?.total },
+    { key: 'records', label: 'Prontuários', icon: <FileText className="w-3.5 h-3.5" />, count: records?.length },
   ]
 
   return (
@@ -567,6 +569,49 @@ export function PatientDetailPage() {
                       <Badge className={STATUS_COLORS[a.status]}>
                         {STATUS_LABELS[a.status]}
                       </Badge>
+                    </Td>
+                  </tr>
+                ))}
+              </tbody>
+            </Table>
+          )}
+        </Card>
+      )}
+
+      {tab === 'records' && (
+        <Card className="mt-6 border-slate-700/50">
+          <CardHeader title="Prontuários do Paciente" />
+          {!records || records.length === 0 ? (
+            <EmptyState
+              title="Nenhum prontuário"
+              description="O paciente ainda não possui prontuários registrados."
+              icon={<FileText className="w-12 h-12 text-slate-600" />}
+            />
+          ) : (
+            <Table>
+              <thead>
+                <tr>
+                  <Th>Data</Th>
+                  <Th>Queixa Principal</Th>
+                  <Th>Diagnóstico</Th>
+                  <Th>Ações</Th>
+                </tr>
+              </thead>
+              <tbody>
+                {records.map((r) => (
+                  <tr key={r.id} className="hover:bg-slate-800/20 transition-colors">
+                    <Td>{formatDateTime(r.created_at)}</Td>
+                    <Td className="truncate max-w-[200px]">{r.chief_complaint}</Td>
+                    <Td className="truncate max-w-[200px]">{r.diagnosis || '—'}</Td>
+                    <Td>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        icon={<Eye className="w-4 h-4 text-slate-400" />}
+                        onClick={() => navigate(`/records/${r.id}`)}
+                      >
+                        Visualizar
+                      </Button>
                     </Td>
                   </tr>
                 ))}
