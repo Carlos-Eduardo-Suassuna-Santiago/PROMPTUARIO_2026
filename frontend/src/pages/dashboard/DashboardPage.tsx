@@ -9,7 +9,7 @@ import {
   ResponsiveContainer, BarChart, Bar, CartesianGrid,
 } from 'recharts'
 import { useAuthStore, useIsDoctor, useIsAdmin, useIsPatient } from '@/store/auth.store'
-import { useDashboardSummary, useAppointments, usePatients } from '@/hooks'
+import { useDashboardSummary, useAppointments, usePatients, useRecords } from '@/hooks'
 import { PageHeader } from '@/components/layout/AppShell'
 import {
   StatCard, Card, CardHeader, CardBody,
@@ -60,10 +60,12 @@ function CustomTooltip({ active, payload, label }: any) {
 
 // Admin / Doctor dashboard
 function AdminDoctorDashboard() {
+  const todayDate = new Date().toISOString().split('T')[0]
   const { data: summary, isLoading: summaryLoading } = useDashboardSummary()
   const { data: appointments, isLoading: apptLoading } = useAppointments({
-    page: 1, size: 5, status: 'SCHEDULED', sort_dir: 'asc'
+    page: 1, size: 5, status: 'SCHEDULED', sort_dir: 'asc', from_date: todayDate, to_date: todayDate
   })
+  const { data: records, isLoading: recordsLoading } = useRecords()
 
   return (
     <div className="space-y-8">
@@ -91,7 +93,7 @@ function AdminDoctorDashboard() {
         />
         <StatCard
           label="Prontuários registrados"
-          value="—"
+          value={recordsLoading ? '—' : (records?.total ?? 0)}
           icon={<FileText className="w-5 h-5" />}
           color="brand"
         />
@@ -218,7 +220,8 @@ function AdminDoctorDashboard() {
 // Patient dashboard — simplified view
 function PatientDashboard() {
   const { user } = useAuthStore()
-  const { data: appointments } = useAppointments({ page: 1, size: 3, sort_dir: 'asc' })
+  const todayDate = new Date().toISOString().split('T')[0]
+  const { data: appointments } = useAppointments({ page: 1, size: 3, sort_dir: 'asc', from_date: todayDate, to_date: todayDate })
 
   return (
     <div className="space-y-6">
