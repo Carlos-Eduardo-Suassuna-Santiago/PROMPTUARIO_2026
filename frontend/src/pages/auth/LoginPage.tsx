@@ -230,20 +230,7 @@ export function LoginPage() {
             </p>
           </div>
 
-          {/* Role hints */}
-          <div className="mt-4 p-4 bg-slate-900/60 rounded-xl border border-slate-800/60">
-            <p className="text-xs font-medium text-slate-500 mb-2">Credenciais padrão</p>
-            <div className="space-y-1.5">
-              {[
-                { role: 'Admin', email: 'admin@promptuario.health', pwd: 'Admin@12345' },
-              ].map((c) => (
-                <div key={c.role} className="text-xs text-slate-600">
-                  <span className="text-brand-400 font-medium">{c.role}:</span>{' '}
-                  {c.email} / {c.pwd}
-                </div>
-              ))}
-            </div>
-          </div>
+
         </div>
       </div>
     </div>
