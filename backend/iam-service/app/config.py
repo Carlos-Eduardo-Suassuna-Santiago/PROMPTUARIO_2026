@@ -37,5 +37,12 @@ class Settings(BaseSettings):
     FIRST_ADMIN_PASSWORD: str = "Admin@12345"
     FIRST_ADMIN_NAME: str = "Administrador"
 
+    # SMTP Configuration
+    SMTP_SERVER: str = "mailpit"
+    SMTP_PORT: int = 1025
+    SMTP_USERNAME: str = ""
+    SMTP_PASSWORD: str = ""
+    SMTP_FROM_EMAIL: str = "noreply@promptuario.health"
+
 
 settings = Settings()

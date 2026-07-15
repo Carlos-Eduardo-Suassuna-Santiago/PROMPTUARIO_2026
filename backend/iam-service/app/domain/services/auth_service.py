@@ -249,11 +249,14 @@ class AuthService:
         await reset_repo.save(reset_token)
         await self.session.commit()
 
-        # In production, send email with reset link
-        # For now, return the token in the response for development/testing
+
+        # Send email with reset link
+        reset_link = f"http://localhost:3000/reset-password?token={raw_token}"
+        from app.infrastructure.email_sender import send_reset_password_email
+        send_reset_password_email(email, reset_link)
+
         return {
-            "message": "Se o email estiver cadastrado, você receberá um link para redefinir sua senha.",
-            "reset_token": raw_token,  # Only returned in dev; remove in production
+            "message": "Se o email estiver cadastrado, você receberá um link para redefinir sua senha."
         }
 
     async def reset_password(self, token: str, new_password: str) -> dict:

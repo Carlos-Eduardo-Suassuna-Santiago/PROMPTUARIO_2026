@@ -431,6 +431,15 @@ services:
     networks: [ backend ]
     restart: unless-stopped
 
+  # ─── EMAIL SERVICE (MAILPIT) ───────────────────────────────────
+  mailpit:
+    image: axllent/mailpit:v1.20
+    ports:
+      - "8025:8025" # Web UI
+      - "1025:1025" # SMTP Port
+    networks: [ backend ]
+    restart: unless-stopped
+
   # ─── BACKUP SERVICE ────────────────────────────────────────────
   backup-service:
     build:
