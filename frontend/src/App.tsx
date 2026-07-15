@@ -5,6 +5,7 @@ import { ReactQueryDevtools } from '@tanstack/react-query-devtools'
 import { useAuthStore } from '@/store/auth.store'
 import { AppShell, AuthGuard, RoleGuard } from '@/components/layout/AppShell'
 import { PageLoader } from '@/components/ui'
+import { ErrorBoundary } from '@/components/layout/ErrorBoundary'
 
 // Lazy-loaded pages
 const LoginPage = lazy(() =>
@@ -164,7 +165,9 @@ export function App() {
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
         <AppBootstrap />
-        <AppRoutes />
+        <ErrorBoundary>
+          <AppRoutes />
+        </ErrorBoundary>
       </BrowserRouter>
       {import.meta.env.DEV && <ReactQueryDevtools initialIsOpen={false} />}
     </QueryClientProvider>

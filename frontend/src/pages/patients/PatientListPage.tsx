@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -240,12 +240,20 @@ export function PatientListPage() {
   const [debouncedSearch, setDebouncedSearch] = useState('')
   const [createOpen, setCreateOpen] = useState(false)
   const queryClient = useQueryClient()
+  const searchTimerRef = useRef<NodeJS.Timeout | null>(null)
+
+  // Clear timer on unmount
+  useEffect(() => {
+    return () => {
+      if (searchTimerRef.current) clearTimeout(searchTimerRef.current)
+    }
+  }, [])
 
   // Debounce search
   const handleSearch = (value: string) => {
     setSearch(value)
-    clearTimeout((window as any)._searchTimer)
-    ;(window as any)._searchTimer = setTimeout(() => {
+    if (searchTimerRef.current) clearTimeout(searchTimerRef.current)
+    searchTimerRef.current = setTimeout(() => {
       setDebouncedSearch(value)
       setPage(1)
     }, 350)

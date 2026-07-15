@@ -255,6 +255,14 @@ services:
     networks: [ backend ]
     ports:
       - "8004:8000"
+    deploy:
+      resources:
+        limits:
+          cpus: '0.50'
+          memory: 512M
+        reservations:
+          cpus: '0.1'
+          memory: 128M
 
   reporting-service:
     build:

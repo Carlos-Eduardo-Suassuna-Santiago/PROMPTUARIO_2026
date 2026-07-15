@@ -51,7 +51,7 @@ class DoctorSchedule(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
     slots: Mapped[list["TimeSlot"]] = relationship(
-        "TimeSlot", back_populates="schedule", cascade="all, delete-orphan"
+        "TimeSlot", back_populates="schedule", cascade="all, delete-orphan", lazy="selectin"
     )
 
 
@@ -140,16 +140,16 @@ class MedicalRecord(Base):
 
     appointment: Mapped[Appointment] = relationship("Appointment", back_populates="medical_record")
     prescriptions: Mapped[list["Prescription"]] = relationship(
-        "Prescription", back_populates="record", cascade="all, delete-orphan"
+        "Prescription", back_populates="record", cascade="all, delete-orphan", lazy="selectin"
     )
     exam_requests: Mapped[list["ExamRequest"]] = relationship(
-        "ExamRequest", back_populates="record", cascade="all, delete-orphan"
+        "ExamRequest", back_populates="record", cascade="all, delete-orphan", lazy="selectin"
     )
     certificates: Mapped[list["MedicalCertificate"]] = relationship(
-        "MedicalCertificate", back_populates="record", cascade="all, delete-orphan"
+        "MedicalCertificate", back_populates="record", cascade="all, delete-orphan", lazy="selectin"
     )
     history: Mapped[list["MedicalRecordHistory"]] = relationship(
-        "MedicalRecordHistory", back_populates="record", cascade="all, delete-orphan"
+        "MedicalRecordHistory", back_populates="record", cascade="all, delete-orphan", lazy="selectin"
     )
 
 
@@ -235,7 +235,7 @@ class ExamRequest(Base):
 
     # Audit trail
     history: Mapped[list["ExamRequestHistory"]] = relationship(
-        "ExamRequestHistory", back_populates="exam", cascade="all, delete-orphan"
+        "ExamRequestHistory", back_populates="exam", cascade="all, delete-orphan", lazy="selectin"
     )
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)

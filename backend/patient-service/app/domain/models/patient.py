@@ -53,19 +53,19 @@ class Patient(Base):
     )
 
     allergies: Mapped[list["Allergy"]] = relationship(
-        "Allergy", back_populates="patient", cascade="all, delete-orphan"
+        "Allergy", back_populates="patient", cascade="all, delete-orphan", lazy="selectin"
     )
     vaccines: Mapped[list["Vaccine"]] = relationship(
-        "Vaccine", back_populates="patient", cascade="all, delete-orphan"
+        "Vaccine", back_populates="patient", cascade="all, delete-orphan", lazy="selectin"
     )
     medications: Mapped[list["ContinuousMedication"]] = relationship(
-        "ContinuousMedication", back_populates="patient", cascade="all, delete-orphan"
+        "ContinuousMedication", back_populates="patient", cascade="all, delete-orphan", lazy="selectin"
     )
     medication_history: Mapped[list["MedicationHistory"]] = relationship(
-        "MedicationHistory", back_populates="patient", cascade="all, delete-orphan"
+        "MedicationHistory", back_populates="patient", cascade="all, delete-orphan", lazy="selectin"
     )
     documents: Mapped[list["PatientDocument"]] = relationship(
-        "PatientDocument", back_populates="patient", cascade="all, delete-orphan"
+        "PatientDocument", back_populates="patient", cascade="all, delete-orphan", lazy="selectin"
     )
 
 

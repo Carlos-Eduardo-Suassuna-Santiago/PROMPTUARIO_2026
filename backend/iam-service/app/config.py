@@ -1,4 +1,5 @@
 from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic import model_validator
 
 
 class Settings(BaseSettings):
@@ -44,5 +45,12 @@ class Settings(BaseSettings):
     SMTP_PASSWORD: str = ""
     SMTP_FROM_EMAIL: str = "noreply@promptuario.health"
 
+
+
+    @model_validator(mode="after")
+    def validate_secrets(self) -> "Settings":
+        if not self.DEBUG and self.JWT_SECRET_KEY == "change-me-in-production":
+            raise ValueError("🔴 CRITICAL: JWT_SECRET_KEY must be configured in production!")
+        return self
 
 settings = Settings()
