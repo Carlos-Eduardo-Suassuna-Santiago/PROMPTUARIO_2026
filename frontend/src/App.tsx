@@ -64,13 +64,11 @@ const ProfilePage = lazy(() =>
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      staleTime: 30_000,
       retry: (failureCount, error: any) => {
         // Don't retry on auth errors
         if (error?.response?.status === 401 || error?.response?.status === 403) return false
         return failureCount < 2
       },
-      refetchOnWindowFocus: false,
     },
     mutations: {
       retry: false,
