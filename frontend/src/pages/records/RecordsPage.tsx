@@ -371,7 +371,7 @@ function RecordDetailView({ recordId }: { recordId: string }) {
                   </Button>
                 </div>
                 <div className="space-y-2">
-                  {rx.medications.map((med, i) => (
+                  {rx.medications?.map((med, i) => (
                     <div key={i} className="flex items-start gap-3 text-sm">
                       <span className="text-slate-600 text-xs mt-0.5">{i + 1}.</span>
                       <div>
@@ -437,7 +437,7 @@ function RecordDetailView({ recordId }: { recordId: string }) {
       )}
 
       {/* AI analyses */}
-      {analyses && analyses.items.length > 0 && (
+      {analyses?.items?.length > 0 && (
         <Card>
           <CardHeader>
             <h3 className="text-sm font-semibold text-slate-200 flex items-center gap-2">
@@ -446,7 +446,7 @@ function RecordDetailView({ recordId }: { recordId: string }) {
             </h3>
           </CardHeader>
           <CardBody className="space-y-3">
-            {analyses.items.map((job) => (
+            {analyses.items?.map((job) => (
               <div key={job.id} className="p-4 bg-slate-950/60 rounded-xl border border-slate-800/60">
                 <div className="flex items-center justify-between mb-2">
                   <span className="text-xs font-medium text-slate-400">{job.analysis_type.replace(/_/g, ' ')}</span>
@@ -470,7 +470,7 @@ function RecordDetailView({ recordId }: { recordId: string }) {
                   <div className="mt-2">
                     <p className="text-xs text-slate-500 mb-1">Recomendações:</p>
                     <ul className="space-y-0.5">
-                      {(job.result.recommendations as string[]).map((r, i) => (
+                      {(job.result?.recommendations as string[])?.map((r, i) => (
                         <li key={i} className="text-xs text-slate-400">• {r}</li>
                       ))}
                     </ul>
@@ -544,7 +544,7 @@ export function RecordsPage() {
 
       {isLoading ? (
         <PageLoader />
-      ) : !records?.items.length ? (
+      ) : !records?.items?.length ? (
         <Card>
           <CardBody>
             <EmptyState
@@ -563,7 +563,7 @@ export function RecordsPage() {
         </Card>
       ) : (
         <div className="space-y-3">
-          {records.items.map((record) => (
+          {records?.items?.map((record) => (
             <RecordCard key={record.id} record={record} />
           ))}
         </div>

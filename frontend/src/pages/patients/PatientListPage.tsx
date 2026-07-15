@@ -326,7 +326,7 @@ export function PatientListPage() {
                 </tr>
               </thead>
               <tbody>
-                {data.items.map((p) => (
+                {data?.items?.map((p) => (
                   <PatientRow key={p.id} patient={p} />
                 ))}
               </tbody>

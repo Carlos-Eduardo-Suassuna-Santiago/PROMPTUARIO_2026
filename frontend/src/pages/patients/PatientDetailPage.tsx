@@ -404,7 +404,7 @@ export function PatientDetailPage() {
                 </tr>
               </thead>
               <tbody>
-                {allergies.map((a) => (
+                {allergies?.map((a) => (
                   <tr key={a.id} className="hover:bg-slate-800/20 transition-colors">
                     <Td className="font-medium text-slate-200">{a.substance}</Td>
                     <Td>
@@ -467,7 +467,7 @@ export function PatientDetailPage() {
                 </tr>
               </thead>
               <tbody>
-                {vaccines.map((v) => (
+                {vaccines?.map((v) => (
                   <tr key={v.id} className="hover:bg-slate-800/20 transition-colors">
                     <Td className="font-medium text-slate-200">{v.name}</Td>
                     <Td>{v.dose ?? '—'}</Td>
@@ -518,7 +518,7 @@ export function PatientDetailPage() {
                 </tr>
               </thead>
               <tbody>
-                {medications.map((m) => (
+                {medications?.map((m) => (
                   <tr key={m.id} className="hover:bg-slate-800/20 transition-colors">
                     <Td className="font-medium text-slate-200">{m.name}</Td>
                     <Td>{m.dosage}</Td>
@@ -569,7 +569,7 @@ export function PatientDetailPage() {
                 </tr>
               </thead>
               <tbody>
-                {appointments.items.map((a) => (
+                {appointments?.items?.map((a) => (
                   <tr key={a.id} className="hover:bg-slate-800/20 transition-colors">
                     <Td>{formatDateTime(a.scheduled_at)}</Td>
                     <Td>{a.appointment_type}</Td>
@@ -609,7 +609,7 @@ export function PatientDetailPage() {
                 </tr>
               </thead>
               <tbody>
-                {records.items.map((r) => (
+                {records?.items?.map((r) => (
                   <tr key={r.id} className="hover:bg-slate-800/20 transition-colors">
                     <Td>{formatDateTime(r.created_at)}</Td>
                     <Td className="truncate max-w-[200px]">{r.chief_complaint}</Td>
@@ -683,7 +683,7 @@ export function PatientDetailPage() {
                 </tr>
               </thead>
               <tbody>
-                {documents.map((doc) => (
+                {documents?.map((doc) => (
                   <tr key={doc.id} className="hover:bg-slate-800/20 transition-colors">
                     <Td>{formatDateTime(doc.created_at)}</Td>
                     <Td>
