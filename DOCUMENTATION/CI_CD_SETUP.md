@@ -1,53 +1,189 @@
 # CI/CD Setup - PROMPTUARIO_2026
 
-Este documento descreve os templates de CI/CD adicionados ao repositório e como usá-los.
-
-## Arquivos gerados
-
-- [`.github/workflows/ci-service.yml`](.github/workflows/ci-service.yml) — workflow genérico para serviços Python/FastAPI: lint, type-check, testes, build de imagem e scan.
-- [`ci/smoke_test_runner.py`](ci/smoke_test_runner.py) — runner simples para executar o script de smoke tests presente em `backend/scripts/fastapi_services_smoke.py`.
-
-## Variáveis de ambiente e Secrets necessários
-
-Configurar os seguintes `secrets` no provedor (GitHub Actions):
-
-- `DOCKER_REGISTRY_USER` — usuário do registry (opcional).
-- `DOCKER_REGISTRY_TOKEN` — token/password para publicar imagens.
-- `DOCKER_REGISTRY_HOST` — host do registry (ex: `ghcr.io/owner` ou `docker.io/owner`).
-- `TRIVY_TOKEN` — token para scanner de imagem (opcional), ou instale trivy no runner.
-
-Notas adicionais:
-- `PYTHON_VERSION` é definido no workflow; atualize conforme necessário.
-
-## Como usar localmente
-
-Para reproduzir os passos do workflow localmente (testes e lint):
-
-```powershell
-python -m pip install -r backend/requirements.txt
-pip install ruff mypy pytest pytest-cov
-ruff check backend
-mypy backend
-pytest backend -q
-```
-
-Para executar o smoke runner localmente:
-
-```powershell
-python ci\smoke_test_runner.py
-```
-
-## Recomendações
-
-- Centralizar dev-requirements em `backend/requirements-dev.txt` para acelerar CI.
-- Configurar `branch protection` em `main` exigindo os checks `test-and-lint` e `build-image`.
-- Adicionar um job extra de `deploy-to-staging` que só roda em `main` com imagens aprovadas.
-
-## Próximos passos
-
-- Gerar templates específicos por serviço em `backend/<service>/.github/workflows/ci.yml` caso cada serviço possua dependências distintas.
-- Integrar upload de SBOM e relatórios de scanner como artefatos do workflow.
+**Data:** 15 de julho de 2026  
+**Status:** ✅ **Completamente operacional**
 
 ---
 
-Documento gerado automaticamente pelo assistente. Ajuste o conteúdo conforme ambiente de registro e políticas internas.
+## 📋 Workflows Implementados
+
+O pipeline de CI/CD do PROMPTUARIO utiliza **GitHub Actions** com 4 workflows principais:
+
+| Workflow | Arquivo | Evento | Ações |
+|----------|---------|--------|-------|
+| **Backend CI** | `.github/workflows/backend-ci.yml` | Push/PR em `backend/` | Lint (ruff) + Testes (pytest) em 6 serviços |
+| **Frontend CI** | `.github/workflows/frontend-ci.yml` | Push/PR em `frontend/` | Lint + Testes (vitest) + Build |
+| **Docker Build** | `.github/workflows/docker-build.yml` | Push em `main` ou `developer` | Build + Push para GitHub Container Registry (GHCR) |
+| **Deploy** | `.github/workflows/deploy.yml` | Push em `main` | Deploy via SSH para servidor de produção |
+
+---
+
+## 🔧 Workflow: Backend CI
+
+**Arquivo:** `.github/workflows/backend-ci.yml`
+
+```yaml
+name: Backend CI
+
+on:
+  push:
+    paths: ['backend/**']
+  pull_request:
+    paths: ['backend/**']
+```
+
+### Jobs
+
+1. **Lint** (matrix: 6 serviços)
+   - Executa `ruff check` em cada serviço
+   
+2. **Tests** (matrix: 6 serviços)
+   - Executa `pytest` com cobertura
+   - Gera relatório XML de coverage
+   - Faz upload como artefato
+
+### Serviços na matrix
+```
+iam-service, patient-service, clinical-service, ai-service, reporting-service, gateway
+```
+
+### Dependências
+- Python 3.12
+- ruff 0.6.8
+- pytest 8.3.2 + pytest-asyncio + pytest-cov
+
+---
+
+## 🐳 Workflow: Docker Build & Publish
+
+**Arquivo:** `.github/workflows/docker-build.yml`
+
+```yaml
+name: Docker Build & Publish
+
+on:
+  push:
+    branches: [main, developer]
+```
+
+### Jobs
+
+1. **docker-build** (matrix: 6 serviços backend)
+   - Build multi-plataforma com BuildKit
+   - Push para `ghcr.io/<owner>/promptuario-<service>:latest`
+   - Push para `ghcr.io/<owner>/promptuario-<service>:<commit-sha>`
+   - Cache de camadas via GitHub Actions
+
+2. **docker-build-frontend**
+   - Build do frontend React
+   - Injeta `VITE_API_BASE_URL` via build-args
+   - Push para `ghcr.io/<owner>/promptuario-frontend:latest`
+
+### Registry
+```
+ghcr.io/<organization>/promptuario-iam-service
+ghcr.io/<organization>/promptuario-patient-service
+ghcr.io/<organization>/promptuario-clinical-service
+ghcr.io/<organization>/promptuario-ai-service
+ghcr.io/<organization>/promptuario-reporting-service
+ghcr.io/<organization>/promptuario-gateway
+ghcr.io/<organization>/promptuario-frontend
+```
+
+---
+
+## 🚀 Workflow: Deploy
+
+**Arquivo:** `.github/workflows/deploy.yml`
+
+```yaml
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+```
+
+Realiza deploy automático via SSH no servidor de produção:
+```bash
+cd PROMPTUARIO_2026
+git pull origin main
+cd backend
+docker compose up --build -d
+```
+
+### Secrets Necessários
+
+| Secret | Descrição |
+|--------|-----------|
+| `SERVER_HOST_BACKEND` | IP/DNS do servidor de produção |
+| `SERVER_USER_BACKEND` | Usuário SSH |
+| `SERVER_SSH_KEY_BACKEND` | Chave privada SSH |
+| `PROD_API_URL` | URL da API para build do frontend |
+
+---
+
+## 🧪 Smoke Test Runner
+
+**Arquivo:** `ci/smoke_test_runner.py`
+
+Runner simples utilizado pela CI para validar serviços em deploy:
+```python
+# Executa o script de smoke tests do backend
+python backend/scripts/fastapi_services_smoke.py
+```
+
+---
+
+## 📊 Cobertura de Testes por Serviço
+
+| Serviço | Test Files | Frameworks |
+|---------|-----------|------------|
+| **IAM** | `test_auth.py`, `test_auth_fastapi.py` | pytest + pytest-asyncio |
+| **Patient** | `test_patient.py`, `test_documents.py`, `test_medication_history.py` | pytest |
+| **Clinical** | `test_clinical.py`, `test_prescription_pdf.py`, `test_rich_notes_and_signature.py` | pytest |
+| **AI** | `test_ai_service.py`, `test_llm_client.py`, `test_schemas.py`, `test_ai_integration_existing_db.py` | pytest |
+| **Reporting** | `test_schemas.py`, `test_xlsx_builder.py` | pytest |
+| **Gateway** | `test_gateway_resilience.py` | pytest |
+
+---
+
+## 🔒 Boas Práticas Implementadas
+
+- ✅ **Concorrência**: Workflows com `concurrency` para cancelar execuções duplicadas
+- ✅ **Cache**: Cache de dependências Python (pip) e camadas Docker (BuildKit)
+- ✅ **Matrix Strategy**: Execução paralela por serviço
+- ✅ **Artefatos**: Upload de relatórios de cobertura
+- ✅ **Isolamento de Paths**: Workflows disparam apenas quando `backend/**` ou `frontend/**` são alterados
+- ✅ **Branch Protection**: (recomendado) Exigir checks passando em `main`
+
+---
+
+## 📝 Recomendações
+
+1. Configurar **branch protection** em `main` exigindo os checks dos workflows
+2. Adicionar **job de staging** antes do deploy em produção
+3. Integrar **scanner de vulnerabilidades** (Trivy) nas imagens Docker
+4. Configurar **notificações** (Slack/Discord) para falhas no CI/CD
+
+---
+
+## 🔄 Fluxo Completo
+
+```
+Desenvolvedor faz push → GitHub Actions detecta mudanças
+    ↓
+   [Backend CI] Lint + Tests
+    ↓
+   [Docker Build] Build + Push para GHCR
+    ↓
+   [Deploy] (apenas main) SSH → git pull → docker compose up -d
+    ↓
+   [Smoke Tests] Valida serviços em funcionamento
+```
+
+---
+
+**Documento Gerado:** 15 de julho de 2026  
+**Versão:** 1.1.0  
+**Responsável:** Equipe de Engenharia PROMPTUARIO
