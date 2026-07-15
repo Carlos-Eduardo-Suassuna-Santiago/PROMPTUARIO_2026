@@ -179,11 +179,7 @@ export function LoginPage() {
               {isLoading ? 'Entrando…' : 'Entrar'}
             </Button>
 
-            <div className="flex items-center justify-end text-sm">
-              <Link to="/auth/2fa" state={{ email: 'admin@promptuario.health' }} className="text-slate-500 hover:text-slate-300 transition-colors">
-                Validar 2FA
-              </Link>
-            </div>
+
           </form>
 
           {/* OAuth divider */}
