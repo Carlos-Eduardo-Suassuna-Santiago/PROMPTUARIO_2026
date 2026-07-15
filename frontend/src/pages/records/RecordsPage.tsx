@@ -437,16 +437,16 @@ function RecordDetailView({ recordId }: { recordId: string }) {
       )}
 
       {/* AI analyses */}
-      {analyses?.items?.length > 0 && (
+      {(analyses?.items?.length ?? 0) > 0 && (
         <Card>
           <CardHeader>
             <h3 className="text-sm font-semibold text-slate-200 flex items-center gap-2">
               <Brain className="w-4 h-4 text-violet-400" />
-              Análises de IA ({analyses.items.length})
+              Análises de IA ({analyses?.items?.length})
             </h3>
           </CardHeader>
           <CardBody className="space-y-3">
-            {analyses.items?.map((job) => (
+            {analyses?.items?.map((job) => (
               <div key={job.id} className="p-4 bg-slate-950/60 rounded-xl border border-slate-800/60">
                 <div className="flex items-center justify-between mb-2">
                   <span className="text-xs font-medium text-slate-400">{job.analysis_type.replace(/_/g, ' ')}</span>
