@@ -19,6 +19,7 @@ export function ForgotPasswordPage() {
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState(false)
+  const [resetToken, setResetToken] = useState<string | null>(null)
 
   const {
     register,
@@ -32,7 +33,8 @@ export function ForgotPasswordPage() {
     setError(null)
     setIsLoading(true)
     try {
-      await authApi.forgotPassword(data.email)
+      const resp = await authApi.forgotPassword(data.email)
+      if (resp.reset_token) setResetToken(resp.reset_token)
       setSuccess(true)
     } catch (err) {
       setError(getErrorMessage(err))
@@ -52,6 +54,14 @@ export function ForgotPasswordPage() {
           <p className="text-slate-400 text-sm mb-8">
             Se o email estiver cadastrado, você receberá um link para redefinir sua senha.
           </p>
+          {resetToken && (
+            <Button
+              className="w-full mb-3 bg-brand-500 hover:bg-brand-600 text-white"
+              onClick={() => navigate(`/reset-password?token=${resetToken}`)}
+            >
+              Simular Link do E-mail
+            </Button>
+          )}
           <Button
             variant="outline"
             className="w-full"
