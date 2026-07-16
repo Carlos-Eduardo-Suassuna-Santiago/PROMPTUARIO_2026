@@ -240,7 +240,7 @@ export function PatientListPage() {
   const [debouncedSearch, setDebouncedSearch] = useState('')
   const [createOpen, setCreateOpen] = useState(false)
   const queryClient = useQueryClient()
-  const searchTimerRef = useRef<NodeJS.Timeout | null>(null)
+  const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // Clear timer on unmount
   useEffect(() => {
