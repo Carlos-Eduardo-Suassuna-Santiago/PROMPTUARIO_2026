@@ -109,6 +109,7 @@ class PatientService:
             PatientCreatedEvent(
                 patient_id=patient.id,
                 user_id=patient.user_id,
+                full_name=patient.full_name,
                 date_of_birth=str(patient.date_of_birth) if patient.date_of_birth else None,
                 blood_type=patient.blood_type,
             )

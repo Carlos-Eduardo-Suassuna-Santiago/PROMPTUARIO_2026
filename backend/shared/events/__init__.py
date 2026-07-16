@@ -90,6 +90,7 @@ class PatientCreatedEvent(DomainEvent):
     event_type: str = "PatientCreated"
     patient_id: str
     user_id: str
+    full_name: str
     date_of_birth: str | None = None
     blood_type: str | None = None
 
