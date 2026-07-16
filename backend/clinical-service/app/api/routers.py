@@ -77,11 +77,11 @@ async def list_appointments(
             from app.domain.models.clinical import PatientProjection
             from sqlalchemy import select
             res = await session.execute(
-                select(PatientProjection.user_id, PatientProjection.full_name)
-                .where(PatientProjection.user_id.in_(p_ids))
+                select(PatientProjection.id, PatientProjection.full_name)
+                .where(PatientProjection.id.in_(p_ids))
             )
             for row in res.all():
-                p_names[row.user_id] = row.full_name
+                p_names[row.id] = row.full_name
                 
         response_items = []
         for a in items:
@@ -198,7 +198,7 @@ async def complete_appointment(appointment_id: str, request: Request, user=Depen
 async def _inject_patient_name(session, record):
     from app.domain.models.clinical import PatientProjection
     from sqlalchemy import select
-    proj = await session.scalar(select(PatientProjection).where(PatientProjection.user_id == record.patient_id))
+    proj = await session.scalar(select(PatientProjection).where(PatientProjection.id == record.patient_id))
     dto = MedicalRecordResponse.model_validate(record)
     if proj:
         dto.patient_name = proj.full_name
@@ -300,11 +300,11 @@ async def list_records(
             from app.domain.models.clinical import PatientProjection
             from sqlalchemy import select
             res = await session.execute(
-                select(PatientProjection.user_id, PatientProjection.full_name)
-                .where(PatientProjection.user_id.in_(p_ids))
+                select(PatientProjection.id, PatientProjection.full_name)
+                .where(PatientProjection.id.in_(p_ids))
             )
             for row in res.all():
-                p_names[row.user_id] = row.full_name
+                p_names[row.id] = row.full_name
                 
         response_items = []
         for r in items:
@@ -339,11 +339,11 @@ async def list_patient_records(
             from app.domain.models.clinical import PatientProjection
             from sqlalchemy import select
             res = await session.execute(
-                select(PatientProjection.user_id, PatientProjection.full_name)
-                .where(PatientProjection.user_id.in_(p_ids))
+                select(PatientProjection.id, PatientProjection.full_name)
+                .where(PatientProjection.id.in_(p_ids))
             )
             for row in res.all():
-                p_names[row.user_id] = row.full_name
+                p_names[row.id] = row.full_name
                 
         response_items = []
         for r in items:
