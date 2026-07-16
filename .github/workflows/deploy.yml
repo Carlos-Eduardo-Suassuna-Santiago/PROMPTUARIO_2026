@@ -17,7 +17,7 @@ jobs:
           key: ${{ secrets.SERVER_SSH_KEY_BACKEND }}
           script: |
             # Entra na pasta do projeto e atualiza o código
-            cd promptuario
+            cd PROMPTUARIO_2026
             git pull origin main
             
             # Entra na pasta do backend e reconstrói as imagens
