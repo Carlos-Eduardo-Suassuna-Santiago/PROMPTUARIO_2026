@@ -40,8 +40,8 @@ class AppointmentRepository:
         cq = select(func.count()).select_from(Appointment)
         
         if patient_name:
-            q = q.join(PatientProjection, Appointment.patient_id == PatientProjection.user_id)
-            cq = cq.join(PatientProjection, Appointment.patient_id == PatientProjection.user_id)
+            q = q.join(PatientProjection, Appointment.patient_id == PatientProjection.id)
+            cq = cq.join(PatientProjection, Appointment.patient_id == PatientProjection.id)
             
         filters = []
         if patient_name:

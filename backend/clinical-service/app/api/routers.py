@@ -152,7 +152,7 @@ async def cancel_appointment(
         dto = AppointmentResponse.model_validate(result)
         from app.domain.models.clinical import PatientProjection
         from sqlalchemy import select
-        p_name = await session.scalar(select(PatientProjection.full_name).where(PatientProjection.user_id == result.patient_id))
+        p_name = await session.scalar(select(PatientProjection.full_name).where(PatientProjection.id == result.patient_id))
         dto.patient_name = p_name
         return dto
 
@@ -170,7 +170,7 @@ async def confirm_appointment(appointment_id: str, request: Request, user=Depend
         dto = AppointmentResponse.model_validate(result)
         from app.domain.models.clinical import PatientProjection
         from sqlalchemy import select
-        p_name = await session.scalar(select(PatientProjection.full_name).where(PatientProjection.user_id == result.patient_id))
+        p_name = await session.scalar(select(PatientProjection.full_name).where(PatientProjection.id == result.patient_id))
         dto.patient_name = p_name
         return dto
 
@@ -188,7 +188,7 @@ async def complete_appointment(appointment_id: str, request: Request, user=Depen
         dto = AppointmentResponse.model_validate(result)
         from app.domain.models.clinical import PatientProjection
         from sqlalchemy import select
-        p_name = await session.scalar(select(PatientProjection.full_name).where(PatientProjection.user_id == result.patient_id))
+        p_name = await session.scalar(select(PatientProjection.full_name).where(PatientProjection.id == result.patient_id))
         dto.patient_name = p_name
         return dto
 
