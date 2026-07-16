@@ -112,13 +112,15 @@ async def create_appointment(body: AppointmentCreate, request: Request, user=Dep
             from sqlalchemy import select
             patient_proj = await session.scalar(select(PatientProjection.id).where(PatientProjection.user_id == user.sub))
             body.patient_id = patient_proj if patient_proj else user.sub
-    if not body.patient_id:
-        from fastapi import HTTPException as _HTTPException
-        from fastapi import status as _status
-        raise _HTTPException(
-            status_code=_status.HTTP_400_BAD_REQUEST,
-            detail="patient_id é obrigatório para não-pacientes",
-        )
+            
+        if not body.patient_id:
+            from fastapi import HTTPException as _HTTPException
+            from fastapi import status as _status
+            raise _HTTPException(
+                status_code=_status.HTTP_400_BAD_REQUEST,
+                detail="patient_id é obrigatório para não-pacientes",
+            )
+            
         svc = AppointmentService(session, _pub(request))
         result = await svc.create(body, user.sub)
         consultations_total.labels(service=_settings.SERVICE_NAME, status="scheduled").inc()
