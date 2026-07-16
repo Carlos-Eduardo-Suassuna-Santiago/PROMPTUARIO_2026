@@ -378,7 +378,7 @@ function AppointmentRow({
 
       <Td>
         <span className="font-medium text-slate-200">
-          {appt.patient_name ?? 'Não informado'}
+          {appt.patient_name || 'Não informado'}
         </span>
       </Td>
 
