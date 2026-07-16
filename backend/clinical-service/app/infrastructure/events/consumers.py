@@ -70,6 +70,8 @@ def _make_patient_updated_handler(session_factory):
                 if projection:
                     if "phone" in data.get("changed_fields", []):
                         projection.phone = data.get("phone")
+                    if "full_name" in data.get("changed_fields", []):
+                        projection.full_name = data.get("full_name")
                     await session.commit()
                     logger.info("Patient projection updated: %s", data["patient_id"])
         except Exception as e:

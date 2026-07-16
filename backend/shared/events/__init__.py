@@ -103,6 +103,7 @@ class PatientUpdatedEvent(DomainEvent):
     patient_id: str
     changed_fields: list[str]
     phone: str | None = None
+    full_name: str | None = None
 
     ROUTING_KEY: ClassVar[str] = "patient.updated"
     EXCHANGE: ClassVar[str] = "promptuario.patient"

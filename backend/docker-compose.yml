@@ -345,6 +345,7 @@ services:
       CLINICAL_SERVICE_URL: http://clinical-service:8000
       AI_SERVICE_URL: http://ai-service:8000
       REPORTING_SERVICE_URL: http://reporting-service:8000
+      RABBITMQ_MANAGEMENT_URL: http://guest:guest@rabbitmq:15672
       JWT_SECRET_KEY: ${JWT_SECRET_KEY:-super-secret-change-in-production-32chars}
       JWT_ALGORITHM: HS256
       REDIS_URL: redis://redis:6379/0

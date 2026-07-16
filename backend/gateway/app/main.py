@@ -40,6 +40,7 @@ class Settings(BaseSettings):
     CLINICAL_SERVICE_URL: str = "http://localhost:8003"
     AI_SERVICE_URL: str = "http://localhost:8004"
     REPORTING_SERVICE_URL: str = "http://localhost:8005"
+    RABBITMQ_MANAGEMENT_URL: str = "http://guest:guest@localhost:15672"
 
     JWT_SECRET_KEY: str = "change-me-in-production"
     JWT_ALGORITHM: str = "HS256"
@@ -322,6 +323,46 @@ async def _forward_to_service(request: Request, target_url: str, forward_headers
 
 
 # ─── Main proxy handler ───────────────────────────────────────────────────────
+
+@app.api_route(
+    "/rabbitmq/{path:path}",
+    methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    include_in_schema=False,
+)
+async def proxy_rabbitmq(request: Request, path: str):
+    """Proxy para o RabbitMQ Management UI, removendo o prefixo /rabbitmq."""
+    target_url = f"{settings.RABBITMQ_MANAGEMENT_URL}/{path}"
+    if request.url.query:
+        target_url = f"{target_url}?{request.url.query}"
+
+    client: httpx.AsyncClient = request.app.state.http_client
+    body = await request.body()
+
+    forward_headers = dict(request.headers)
+    forward_headers.pop("host", None)
+    forward_headers.pop("Authorization", None)  # Remove JWT para não conflitar
+
+    try:
+        resp = await client.request(
+            method=request.method,
+            url=target_url,
+            headers=forward_headers,
+            content=body,
+        )
+    except httpx.RequestError as exc:
+        logger.error("RabbitMQ unreachable: %s (%s)", target_url, exc)
+        return JSONResponse(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            content={"detail": "RabbitMQ Management indisponível"},
+        )
+
+    return Response(
+        content=resp.content,
+        status_code=resp.status_code,
+        headers={k: v for k, v in resp.headers.items() if k.lower() not in {"transfer-encoding", "connection", "keep-alive", "upgrade"}},
+        media_type=resp.headers.get("content-type"),
+    )
+
 
 @app.api_route(
     "/{path:path}",

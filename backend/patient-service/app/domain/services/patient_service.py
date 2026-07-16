@@ -202,6 +202,7 @@ class PatientService:
                     patient_id=patient.id,
                     changed_fields=changed,
                     phone=patient.phone,
+                    full_name=patient.full_name,
                 )
             )
             await self.repo.session.commit()
