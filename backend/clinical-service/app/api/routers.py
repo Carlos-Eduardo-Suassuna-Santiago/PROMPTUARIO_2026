@@ -64,7 +64,10 @@ async def list_appointments(
         
         # User role scoping
         if user.role == "PATIENT":
-            patient_id = user.sub
+            from app.domain.models.clinical import PatientProjection
+            from sqlalchemy import select
+            patient_proj = await session.scalar(select(PatientProjection.id).where(PatientProjection.user_id == user.sub))
+            patient_id = patient_proj if patient_proj else user.sub
         elif user.role == "DOCTOR" and not patient_id:
             doctor_id = user.sub
 
@@ -102,9 +105,13 @@ async def list_appointments(
     dependencies=[Depends(require_roles("ADMIN", "ATTENDANT", "PATIENT"))],
 )
 async def create_appointment(body: AppointmentCreate, request: Request, user=Depends(get_current_user)):
-    # Auto-atribuir patient_id para pacientes logados
-    if user.role == "PATIENT":
-        body.patient_id = user.sub
+    async with _sf(request)() as session:
+        # Auto-atribuir patient_id para pacientes logados
+        if user.role == "PATIENT":
+            from app.domain.models.clinical import PatientProjection
+            from sqlalchemy import select
+            patient_proj = await session.scalar(select(PatientProjection.id).where(PatientProjection.user_id == user.sub))
+            body.patient_id = patient_proj if patient_proj else user.sub
     if not body.patient_id:
         from fastapi import HTTPException as _HTTPException
         from fastapi import status as _status
@@ -112,7 +119,6 @@ async def create_appointment(body: AppointmentCreate, request: Request, user=Dep
             status_code=_status.HTTP_400_BAD_REQUEST,
             detail="patient_id é obrigatório para não-pacientes",
         )
-    async with _sf(request)() as session:
         svc = AppointmentService(session, _pub(request))
         result = await svc.create(body, user.sub)
         consultations_total.labels(service=_settings.SERVICE_NAME, status="scheduled").inc()
@@ -120,7 +126,7 @@ async def create_appointment(body: AppointmentCreate, request: Request, user=Dep
         dto = AppointmentResponse.model_validate(result)
         from app.domain.models.clinical import PatientProjection
         from sqlalchemy import select
-        p_name = await session.scalar(select(PatientProjection.full_name).where(PatientProjection.user_id == result.patient_id))
+        p_name = await session.scalar(select(PatientProjection.full_name).where(PatientProjection.id == result.patient_id))
         dto.patient_name = p_name
         return dto
 
@@ -133,7 +139,7 @@ async def get_appointment(appointment_id: str, request: Request, user=Depends(ge
         dto = AppointmentResponse.model_validate(result)
         from app.domain.models.clinical import PatientProjection
         from sqlalchemy import select
-        p_name = await session.scalar(select(PatientProjection.full_name).where(PatientProjection.user_id == result.patient_id))
+        p_name = await session.scalar(select(PatientProjection.full_name).where(PatientProjection.id == result.patient_id))
         dto.patient_name = p_name
         return dto
 
