@@ -377,6 +377,12 @@ function AppointmentRow({
       </Td>
 
       <Td>
+        <span className="font-medium text-slate-200">
+          {appt.patient_name ?? 'Não informado'}
+        </span>
+      </Td>
+
+      <Td>
         <Badge className="bg-slate-700/40 text-slate-300 ring-slate-600/30">
           {TYPE_LABELS[appt.appointment_type]}
         </Badge>
@@ -530,7 +536,7 @@ export function AppointmentsPage() {
               <thead>
                 <tr>
                   <Th>Data / Hora</Th>
-
+                  <Th>Paciente</Th>
                   <Th>Tipo</Th>
                   <Th>Especialidade</Th>
                   <Th>Status</Th>
