@@ -338,12 +338,15 @@ async def list_patient_records(
             from app.domain.models.clinical import PatientProjection
             from sqlalchemy import select
             patient_proj = await session.scalar(select(PatientProjection.id).where(PatientProjection.user_id == user.sub))
-            # O frontend manda o user.sub como patient_id quando é paciente.
-            # Se for PATIENT, mapeamos para o ID real. E garantimos que ele só pode ver os dele.
-            if patient_id != user.sub:
+            real_patient_id = patient_proj if patient_proj else user.sub
+            
+            # O frontend pode mandar tanto o user.sub quanto o patient_id real.
+            if patient_id not in (user.sub, real_patient_id):
                 from fastapi import HTTPException
                 raise HTTPException(status_code=403, detail="Acesso negado")
-            patient_id = patient_proj if patient_proj else user.sub
+            
+            # Usar sempre o ID real para buscar no banco
+            patient_id = real_patient_id
             
         svc = MedicalRecordService(session, _pub(request))
         items, total = await svc.list_by_patient(patient_id, page, size)
