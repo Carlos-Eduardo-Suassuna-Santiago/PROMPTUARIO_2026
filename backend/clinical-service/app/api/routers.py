@@ -333,10 +333,18 @@ async def list_patient_records(
     page: int = Query(1, ge=1),
     size: int = Query(20, ge=1, le=50),
 ):
-    if user.role == "PATIENT" and patient_id != user.sub:
-        from fastapi import HTTPException
-        raise HTTPException(status_code=403, detail="Acesso negado")
     async with _sf(request)() as session:
+        if user.role == "PATIENT":
+            from app.domain.models.clinical import PatientProjection
+            from sqlalchemy import select
+            patient_proj = await session.scalar(select(PatientProjection.id).where(PatientProjection.user_id == user.sub))
+            # O frontend manda o user.sub como patient_id quando é paciente.
+            # Se for PATIENT, mapeamos para o ID real. E garantimos que ele só pode ver os dele.
+            if patient_id != user.sub:
+                from fastapi import HTTPException
+                raise HTTPException(status_code=403, detail="Acesso negado")
+            patient_id = patient_proj if patient_proj else user.sub
+            
         svc = MedicalRecordService(session, _pub(request))
         items, total = await svc.list_by_patient(patient_id, page, size)
         

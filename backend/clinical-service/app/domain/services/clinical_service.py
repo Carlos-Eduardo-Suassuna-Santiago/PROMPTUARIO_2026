@@ -456,8 +456,11 @@ class MedicalRecordService:
             raise HTTPException(status_code=404, detail="Prontuário não encontrado")
         # PATIENT can only view their own records
         if role == "PATIENT":
-            from app.infrastructure.repositories.clinical_repository import PatientProjectionRepository
-            if record.patient_id != user_id:
+            from app.domain.models.clinical import PatientProjection
+            from sqlalchemy import select
+            patient_proj = await self.repo.session.scalar(select(PatientProjection.id).where(PatientProjection.user_id == user_id))
+            real_patient_id = patient_proj if patient_proj else user_id
+            if record.patient_id != real_patient_id:
                 raise HTTPException(status_code=403, detail="Acesso negado")
         return record
 
