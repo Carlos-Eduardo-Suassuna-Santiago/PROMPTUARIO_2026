@@ -57,11 +57,14 @@ async def _resolve_patient_id(user_sub: str, request: Request, session) -> str:
     if auth_header:
         try:
             async with httpx.AsyncClient() as client:
-                resp = await client.get("http://patient-service:8000/api/v1/patients/me", headers={"Authorization": auth_header}, timeout=2.0)
+                # Usar o gateway diretamente pois sabemos que a rota funciona pro frontend
+                resp = await client.get("http://gateway:8000/patients/me", headers={"Authorization": auth_header}, timeout=10.0)
                 if resp.status_code == 200:
                     return resp.json().get("id", user_sub)
-        except Exception:
-            pass
+                else:
+                    print(f"[FAILSAFE ERROR] gateway returned {resp.status_code}: {resp.text}")
+        except Exception as e:
+            print(f"[FAILSAFE ERROR] HTTP request to gateway failed: {e}")
 
     return user_sub
 
