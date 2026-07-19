@@ -521,16 +521,18 @@ export function RecordsPage() {
   }
 
   // Para pacientes, buscamos o True Patient ID usando patientsApi.me() no frontend
-  const { data: myPatient } = useMyPatient()
+  const { data: myPatient, isLoading: loadingMyPatient } = useMyPatient()
 
   // Se o paciente estiver vendo a lista, usamos o True Patient ID dele. Se for médico vendo um paciente, usamos o param.
-  const pid = patientId || (isPatient ? myPatient?.id : '')
+  // WORKAROUND: Se o myPatient falhar (ex: 404 porque o seed não criou o patient_db corretamente), fazemos fallback pro user.id
+  const pid = patientId || (isPatient ? (myPatient?.id || user?.id) : '')
   
   const { data: recordsByPatient, isLoading: loadingPatient } = usePatientRecords(pid || '')
   const { data: allRecords, isLoading: loadingAll } = useRecords()
 
   const records = pid ? recordsByPatient : allRecords
-  const isLoading = pid ? loadingPatient : loadingAll
+  // Se for paciente e ainda estiver carregando o myPatient, forçamos isLoading = true para não dar flicker de "Nenhum prontuário"
+  const isLoading = (isPatient && loadingMyPatient) ? true : (pid ? loadingPatient : loadingAll)
 
   return (
     <div>
