@@ -162,7 +162,7 @@ export const recordsApi = {
   listByPatient: (patientId: string, params?: { page?: number; size?: number }) =>
     api.get<{ items: MedicalRecord[]; total: number; page: number; size: number }>(
       `/records/patient/${patientId}`,
-      { params }
+      { params: { ...params, t: Date.now() } }
     ).then(r => r.data),
 
   get: (id: string) => api.get<MedicalRecord>(`/records/${id}`).then(r => r.data),

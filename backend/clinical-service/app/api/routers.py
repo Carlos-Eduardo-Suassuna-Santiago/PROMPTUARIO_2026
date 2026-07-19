@@ -61,7 +61,7 @@ async def _resolve_patient_id(user_sub: str, request: Request, session) -> str:
     if auth_header:
         try:
             async with httpx.AsyncClient() as client:
-                resp = await client.get("http://patient-service:8000/api/v1/me", headers={"Authorization": auth_header}, timeout=10.0)
+                resp = await client.get("http://patient-service:8000/api/v1/patients/me", headers={"Authorization": auth_header}, timeout=10.0)
                 if resp.status_code == 200:
                     return resp.json().get("id", user_sub)
         except Exception:
