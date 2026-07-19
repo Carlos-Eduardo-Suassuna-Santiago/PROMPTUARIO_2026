@@ -121,9 +121,9 @@ class MedicalRecordRepository:
         )
         return result.scalar_one_or_none()
 
-    async def list_by_patient(self, patient_id: str, page: int, size: int) -> tuple[list[MedicalRecord], int]:
+    async def list_by_patient(self, patient_ids: list[str], page: int, size: int) -> tuple[list[MedicalRecord], int]:
         total = await self.session.scalar(
-            select(func.count()).select_from(MedicalRecord).where(MedicalRecord.patient_id == patient_id)
+            select(func.count()).select_from(MedicalRecord).where(MedicalRecord.patient_id.in_(patient_ids))
         ) or 0
         result = await self.session.execute(
             select(MedicalRecord)
@@ -133,11 +133,11 @@ class MedicalRecordRepository:
                 selectinload(MedicalRecord.certificates),
                 selectinload(MedicalRecord.history),
             )
-            .where(MedicalRecord.patient_id == patient_id)
+            .where(MedicalRecord.patient_id.in_(patient_ids))
             .order_by(MedicalRecord.created_at.desc())
             .offset((page - 1) * size).limit(size)
         )
-        return list(result.scalars().all()), total
+        return list(result.scalars().unique().all()), total
 
     async def list_records(self, doctor_id: str | None, page: int, size: int) -> tuple[list[MedicalRecord], int]:
         query = select(MedicalRecord)

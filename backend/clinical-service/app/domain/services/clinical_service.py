@@ -460,7 +460,7 @@ class MedicalRecordService:
             from sqlalchemy import select
             patient_proj = await self.repo.session.scalar(select(PatientProjection.id).where(PatientProjection.user_id == user_id))
             real_patient_id = patient_proj if patient_proj else user_id
-            if record.patient_id != real_patient_id:
+            if record.patient_id not in (user_id, real_patient_id):
                 raise HTTPException(status_code=403, detail="Acesso negado")
         return record
 
@@ -562,8 +562,8 @@ class MedicalRecordService:
             "reason": "Integridade confirmada" if verified else "O conteúdo foi alterado após a assinatura",
         }
 
-    async def list_by_patient(self, patient_id: str, page: int, size: int) -> tuple[list[MedicalRecord], int]:
-        return await self.repo.list_by_patient(patient_id, page, size)
+    async def list_by_patient(self, patient_ids: list[str], page: int, size: int) -> tuple[list[MedicalRecord], int]:
+        return await self.repo.list_by_patient(patient_ids, page, size)
 
     async def list_records(self, doctor_id: str | None, page: int, size: int) -> tuple[list[MedicalRecord], int]:
         return await self.repo.list_records(doctor_id, page, size)

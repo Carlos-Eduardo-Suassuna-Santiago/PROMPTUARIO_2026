@@ -43,6 +43,29 @@ def _pub(r: Request):
     return r.app.state.publisher
 
 
+async def _resolve_patient_id(user_sub: str, request: Request, session) -> str:
+    from app.domain.models.clinical import PatientProjection
+    from sqlalchemy import select
+    import httpx
+
+    patient_proj = await session.scalar(select(PatientProjection.id).where(PatientProjection.user_id == user_sub))
+    if patient_proj:
+        return patient_proj
+
+    # Failsafe: se a projeção estiver ausente (eventos perdidos), busca via HTTP do patient-service
+    auth_header = request.headers.get("Authorization")
+    if auth_header:
+        try:
+            async with httpx.AsyncClient() as client:
+                resp = await client.get("http://patient-service:8000/patients/me", headers={"Authorization": auth_header}, timeout=2.0)
+                if resp.status_code == 200:
+                    return resp.json().get("id", user_sub)
+        except Exception:
+            pass
+
+    return user_sub
+
+
 # ─── Appointments ─────────────────────────────────────────────────────────────
 
 @appointments_router.get("", response_model=AppointmentListResponse)
@@ -64,10 +87,7 @@ async def list_appointments(
         
         # User role scoping
         if user.role == "PATIENT":
-            from app.domain.models.clinical import PatientProjection
-            from sqlalchemy import select
-            patient_proj = await session.scalar(select(PatientProjection.id).where(PatientProjection.user_id == user.sub))
-            patient_id = patient_proj if patient_proj else user.sub
+            patient_id = await _resolve_patient_id(user.sub, request, session)
         elif user.role == "DOCTOR" and not patient_id:
             doctor_id = user.sub
 
@@ -108,10 +128,7 @@ async def create_appointment(body: AppointmentCreate, request: Request, user=Dep
     async with _sf(request)() as session:
         # Auto-atribuir patient_id para pacientes logados
         if user.role == "PATIENT":
-            from app.domain.models.clinical import PatientProjection
-            from sqlalchemy import select
-            patient_proj = await session.scalar(select(PatientProjection.id).where(PatientProjection.user_id == user.sub))
-            body.patient_id = patient_proj if patient_proj else user.sub
+            body.patient_id = await _resolve_patient_id(user.sub, request, session)
             
         if not body.patient_id:
             from fastapi import HTTPException as _HTTPException
@@ -335,21 +352,20 @@ async def list_patient_records(
 ):
     async with _sf(request)() as session:
         if user.role == "PATIENT":
-            from app.domain.models.clinical import PatientProjection
-            from sqlalchemy import select
-            patient_proj = await session.scalar(select(PatientProjection.id).where(PatientProjection.user_id == user.sub))
-            real_patient_id = patient_proj if patient_proj else user.sub
+            real_patient_id = await _resolve_patient_id(user.sub, request, session)
             
             # O frontend pode mandar tanto o user.sub quanto o patient_id real.
             if patient_id not in (user.sub, real_patient_id):
                 from fastapi import HTTPException
                 raise HTTPException(status_code=403, detail="Acesso negado")
             
-            # Usar sempre o ID real para buscar no banco
-            patient_id = real_patient_id
+            # Usar sempre o ID real para buscar no banco, mas também permitir o antigo user.sub caso registros antigos existam
+            target_patient_ids = list({user.sub, real_patient_id})
+        else:
+            target_patient_ids = [patient_id]
             
         svc = MedicalRecordService(session, _pub(request))
-        items, total = await svc.list_by_patient(patient_id, page, size)
+        items, total = await svc.list_by_patient(target_patient_ids, page, size)
         
         # Obter nomes dos pacientes
         p_ids = list({r.patient_id for r in items})
