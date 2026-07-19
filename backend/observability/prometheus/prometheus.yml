@@ -39,15 +39,20 @@ scrape_configs:
       - targets: ["rabbitmq:15692"]
     metrics_path: /metrics
 
-  # ─── PostgreSQL ────────────────────────────────────────────────
+  # ─── PostgreSQL ──────────────────────────────────────────────
   # Uncomment below when postgres-exporter is enabled in docker-compose.yml
-  # - job_name: postgres
-  #   static_configs:
-  #     - targets: ["postgres-exporter:9187"]
+  - job_name: postgres
+    static_configs:
+      - targets: ["postgres-exporter:9187"]
 
-  # ─── MongoDB ──────────────────────────────────────────────────
+  # ─── MongoDB ──────────────────────────────────────────────
   # Uncomment below when mongodb-exporter is enabled in docker-compose.yml
-  # - job_name: mongodb
-  #   static_configs:
-  #     - targets: ["mongodb-exporter:9216"]
-  #   metrics_path: /metrics
+  - job_name: mongodb
+    static_configs:
+      - targets: ["mongodb-exporter:9216"]
+    metrics_path: /metrics
+
+  # ─── Node Exporter (Host Machine Metrics) ───────────────
+  - job_name: node-exporter
+    static_configs:
+      - targets: ["node-exporter:9100"]
