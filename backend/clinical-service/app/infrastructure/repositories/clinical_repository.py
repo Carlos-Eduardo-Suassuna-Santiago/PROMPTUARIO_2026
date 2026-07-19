@@ -123,7 +123,9 @@ class MedicalRecordRepository:
 
     async def list_by_patient(self, patient_ids: list[str], page: int, size: int) -> tuple[list[MedicalRecord], int]:
         total = await self.session.scalar(
-            select(func.count()).select_from(MedicalRecord).where(MedicalRecord.patient_id.in_(patient_ids))
+            # WORKAROUND: Temporarily remove WHERE clause to see if filtering is the issue
+            # select(func.count()).select_from(MedicalRecord).where(MedicalRecord.patient_id.in_(patient_ids))
+            select(func.count()).select_from(MedicalRecord)
         ) or 0
         result = await self.session.execute(
             select(MedicalRecord)
@@ -133,7 +135,8 @@ class MedicalRecordRepository:
                 selectinload(MedicalRecord.certificates),
                 selectinload(MedicalRecord.history),
             )
-            .where(MedicalRecord.patient_id.in_(patient_ids))
+            # WORKAROUND: Temporarily remove WHERE clause to see if filtering is the issue
+            # .where(MedicalRecord.patient_id.in_(patient_ids))
             .order_by(MedicalRecord.created_at.desc())
             .offset((page - 1) * size).limit(size)
         )
