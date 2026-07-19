@@ -125,7 +125,11 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
 
 app.add_middleware(SecurityHeadersMiddleware)
 
-frontend_urls = os.getenv("FRONTEND_URL", "http://localhost:5173,http://localhost:3000").split(",")
+frontend_url_env = os.getenv("FRONTEND_URL", "*")
+if frontend_url_env == "*":
+    frontend_urls = ["*"]
+else:
+    frontend_urls = frontend_url_env.split(",")
 
 app.add_middleware(
     CORSMiddleware,
