@@ -11,7 +11,7 @@ import {
 import {
   usePatientRecords, useRecords, useRecord, useCreateRecord,
   useCreatePrescription, useRecordAnalyses, useRequestAnalysis,
-  useAppointments,
+  useAppointments, useMyPatient,
 } from '@/hooks'
 import { PageHeader } from '@/components/layout/AppShell'
 import {
@@ -520,8 +520,12 @@ export function RecordsPage() {
     )
   }
 
-  // If viewing records for a patient
-  const pid = patientId || (isPatient ? user?.id : '')
+  // Para pacientes, buscamos o True Patient ID usando patientsApi.me() no frontend
+  const { data: myPatient } = useMyPatient()
+
+  // Se o paciente estiver vendo a lista, usamos o True Patient ID dele. Se for médico vendo um paciente, usamos o param.
+  const pid = patientId || (isPatient ? myPatient?.id : '')
+  
   const { data: recordsByPatient, isLoading: loadingPatient } = usePatientRecords(pid || '')
   const { data: allRecords, isLoading: loadingAll } = useRecords()
 
