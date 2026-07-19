@@ -58,7 +58,7 @@ async def _resolve_patient_id(user_sub: str, request: Request, session) -> str:
         try:
             async with httpx.AsyncClient() as client:
                 # Usar o gateway diretamente pois sabemos que a rota funciona pro frontend
-                resp = await client.get("http://gateway:8000/patients/me", headers={"Authorization": auth_header}, timeout=10.0)
+                resp = await client.get("http://gateway:8000/api/v1/patients/me", headers={"Authorization": auth_header}, timeout=10.0)
                 if resp.status_code == 200:
                     return resp.json().get("id", user_sub)
                 else:
