@@ -11,7 +11,7 @@ class Settings(BaseSettings):
     DATABASE_URL: str = "postgresql+asyncpg://patient:patient_pass@localhost:5432/patient_db"
     RABBITMQ_URL: str = "amqp://promptuario:promptuario_pass@localhost:5672/"
 
-    JWT_SECRET_KEY: str = "change-me-in-production"
+    JWT_SECRET_KEY: str
     JWT_ALGORITHM: str = "HS256"
 
     # MinIO / S3-compatible storage for patient documents

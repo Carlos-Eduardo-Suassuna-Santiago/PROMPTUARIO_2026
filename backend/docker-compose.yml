@@ -4,7 +4,7 @@ services:
     image: postgres:15-alpine
     environment:
       POSTGRES_USER: iam
-      POSTGRES_PASSWORD: iam_pass
+      POSTGRES_PASSWORD: {DB_IAM_PASSWORD:-iam_pass}
       POSTGRES_DB: iam_db
     volumes:
       - iam_data:/var/lib/postgresql/data
@@ -19,7 +19,7 @@ services:
     image: postgres:15-alpine
     environment:
       POSTGRES_USER: patient
-      POSTGRES_PASSWORD: patient_pass
+      POSTGRES_PASSWORD: {DB_PATIENT_PASSWORD:-patient_pass}
       POSTGRES_DB: patient_db
     volumes:
       - patient_data:/var/lib/postgresql/data
@@ -34,7 +34,7 @@ services:
     image: postgres:15-alpine
     environment:
       POSTGRES_USER: clinical
-      POSTGRES_PASSWORD: clinical_pass
+      POSTGRES_PASSWORD: {DB_CLINICAL_PASSWORD:-clinical_pass}
       POSTGRES_DB: clinical_db
     volumes:
       - clinical_data:/var/lib/postgresql/data
@@ -49,7 +49,7 @@ services:
     image: postgres:15-alpine
     environment:
       POSTGRES_USER: reporting
-      POSTGRES_PASSWORD: reporting_pass
+      POSTGRES_PASSWORD: {DB_REPORTING_PASSWORD:-reporting_pass}
       POSTGRES_DB: reporting_db
     volumes:
       - reporting_data:/var/lib/postgresql/data
@@ -64,7 +64,7 @@ services:
     image: mongo:7
     environment:
       MONGO_INITDB_ROOT_USERNAME: ai
-      MONGO_INITDB_ROOT_PASSWORD: ai_pass
+      MONGO_INITDB_ROOT_PASSWORD: {DB_AI_PASSWORD:-ai_pass}
       MONGO_INITDB_DATABASE: ai_db
     volumes:
       - ai_data:/data/db
@@ -94,7 +94,7 @@ services:
     image: rabbitmq:3.13-management-alpine
     environment:
       RABBITMQ_DEFAULT_USER: promptuario
-      RABBITMQ_DEFAULT_PASS: promptuario_pass
+      RABBITMQ_DEFAULT_PASS: {RABBITMQ_PASSWORD:-promptuario_pass}
     volumes:
       - rabbitmq_data:/var/lib/rabbitmq
     healthcheck:
@@ -131,9 +131,9 @@ services:
       context: .
       dockerfile: iam-service/Dockerfile
     environment:
-      DATABASE_URL: postgresql+asyncpg://iam:iam_pass@db-iam:5432/iam_db
+      DATABASE_URL: postgresql+asyncpg://iam:{DB_IAM_PASSWORD:-iam_pass}@db-iam:5432/iam_db
       REDIS_URL: redis://redis:6379/0
-      RABBITMQ_URL: amqp://promptuario:promptuario_pass@rabbitmq:5672/
+      RABBITMQ_URL: amqp://promptuario:{RABBITMQ_PASSWORD:-promptuario_pass}@rabbitmq:5672/
       JWT_SECRET_KEY: ${JWT_SECRET_KEY:-super-secret-change-in-production-32chars}
       JWT_ALGORITHM: HS256
       ACCESS_TOKEN_EXPIRE_MINUTES: 30
@@ -153,16 +153,14 @@ services:
       rabbitmq:
         condition: service_healthy
     networks: [ backend ]
-    ports:
-      - "8001:8000"
 
   patient-service:
     build:
       context: .
       dockerfile: patient-service/Dockerfile
     environment:
-      DATABASE_URL: postgresql+asyncpg://patient:patient_pass@db-patient:5432/patient_db
-      RABBITMQ_URL: amqp://promptuario:promptuario_pass@rabbitmq:5672/
+      DATABASE_URL: postgresql+asyncpg://patient:{DB_PATIENT_PASSWORD:-patient_pass}@db-patient:5432/patient_db
+      RABBITMQ_URL: amqp://promptuario:{RABBITMQ_PASSWORD:-promptuario_pass}@rabbitmq:5672/
       JWT_SECRET_KEY: ${JWT_SECRET_KEY:-super-secret-change-in-production-32chars}
       JWT_ALGORITHM: HS256
       SERVICE_NAME: patient-service
@@ -174,16 +172,14 @@ services:
       rabbitmq:
         condition: service_healthy
     networks: [ backend ]
-    ports:
-      - "8002:8000"
 
   clinical-service:
     build:
       context: .
       dockerfile: clinical-service/Dockerfile
     environment:
-      DATABASE_URL: postgresql+asyncpg://clinical:clinical_pass@db-clinical:5432/clinical_db
-      RABBITMQ_URL: amqp://promptuario:promptuario_pass@rabbitmq:5672/
+      DATABASE_URL: postgresql+asyncpg://clinical:{DB_CLINICAL_PASSWORD:-clinical_pass}@db-clinical:5432/clinical_db
+      RABBITMQ_URL: amqp://promptuario:{RABBITMQ_PASSWORD:-promptuario_pass}@rabbitmq:5672/
       JWT_SECRET_KEY: ${JWT_SECRET_KEY:-super-secret-change-in-production-32chars}
       JWT_ALGORITHM: HS256
       S3_ENDPOINT: http://minio:9000
@@ -204,15 +200,13 @@ services:
       minio:
         condition: service_healthy
     networks: [ backend ]
-    ports:
-      - "8003:8000"
 
   clinical-worker:
     build:
       context: .
       dockerfile: clinical-service/Dockerfile.worker
     environment:
-      DATABASE_URL: postgresql+asyncpg://clinical:clinical_pass@db-clinical:5432/clinical_db
+      DATABASE_URL: postgresql+asyncpg://clinical:{DB_CLINICAL_PASSWORD:-clinical_pass}@db-clinical:5432/clinical_db
       CELERY_BROKER_URL: redis://redis:6379/3
       CELERY_RESULT_BACKEND: redis://redis:6379/3
       S3_ENDPOINT: http://minio:9000
@@ -235,8 +229,8 @@ services:
       context: .
       dockerfile: ai-service/Dockerfile
     environment:
-      MONGODB_URL: mongodb://ai:ai_pass@db-ai:27017/ai_db?authSource=admin
-      RABBITMQ_URL: amqp://promptuario:promptuario_pass@rabbitmq:5672/
+      MONGODB_URL: mongodb://ai:{DB_AI_PASSWORD:-ai_pass}@db-ai:27017/ai_db?authSource=admin
+      RABBITMQ_URL: amqp://promptuario:{RABBITMQ_PASSWORD:-promptuario_pass}@rabbitmq:5672/
       REDIS_URL: redis://redis:6379/2
       JWT_SECRET_KEY: ${JWT_SECRET_KEY:-super-secret-change-in-production-32chars}
       JWT_ALGORITHM: HS256
@@ -253,8 +247,6 @@ services:
       rabbitmq:
         condition: service_healthy
     networks: [ backend ]
-    ports:
-      - "8004:8000"
     deploy:
       resources:
         limits:
@@ -269,10 +261,10 @@ services:
       context: .
       dockerfile: reporting-service/Dockerfile
     environment:
-      DATABASE_URL: postgresql+asyncpg://reporting:reporting_pass@db-reporting:5432/reporting_db
+      DATABASE_URL: postgresql+asyncpg://reporting:{DB_REPORTING_PASSWORD:-reporting_pass}@db-reporting:5432/reporting_db
       CELERY_BROKER_URL: redis://redis:6379/1
       CELERY_RESULT_BACKEND: redis://redis:6379/1
-      RABBITMQ_URL: amqp://promptuario:promptuario_pass@rabbitmq:5672/
+      RABBITMQ_URL: amqp://promptuario:{RABBITMQ_PASSWORD:-promptuario_pass}@rabbitmq:5672/
       JWT_SECRET_KEY: ${JWT_SECRET_KEY:-super-secret-change-in-production-32chars}
       JWT_ALGORITHM: HS256
       S3_ENDPOINT: http://minio:9000
@@ -294,18 +286,16 @@ services:
       rabbitmq:
         condition: service_healthy
     networks: [ backend ]
-    ports:
-      - "8005:8000"
 
   reporting-worker:
     build:
       context: .
       dockerfile: reporting-service/Dockerfile.worker
     environment:
-      DATABASE_URL: postgresql+asyncpg://reporting:reporting_pass@db-reporting:5432/reporting_db
+      DATABASE_URL: postgresql+asyncpg://reporting:{DB_REPORTING_PASSWORD:-reporting_pass}@db-reporting:5432/reporting_db
       CELERY_BROKER_URL: redis://redis:6379/1
       CELERY_RESULT_BACKEND: redis://redis:6379/1
-      RABBITMQ_URL: amqp://promptuario:promptuario_pass@rabbitmq:5672/
+      RABBITMQ_URL: amqp://promptuario:{RABBITMQ_PASSWORD:-promptuario_pass}@rabbitmq:5672/
       S3_ENDPOINT: http://minio:9000
       S3_PUBLIC_ENDPOINT: ${S3_PUBLIC_ENDPOINT:-http://localhost:9000}
       S3_ACCESS_KEY: promptuario
@@ -323,7 +313,7 @@ services:
       context: .
       dockerfile: reporting-service/Dockerfile.worker
     environment:
-      DATABASE_URL: postgresql+asyncpg://reporting:reporting_pass@db-reporting:5432/reporting_db
+      DATABASE_URL: postgresql+asyncpg://reporting:{DB_REPORTING_PASSWORD:-reporting_pass}@db-reporting:5432/reporting_db
       CELERY_BROKER_URL: redis://redis:6379/1
       CELERY_RESULT_BACKEND: redis://redis:6379/1
       CELERY_BEAT_SCHEDULE_FILENAME: /tmp/celerybeat-schedule
@@ -367,26 +357,26 @@ services:
   # No separate exporter image needed.
   #
   # Optional exporters (uncomment if you want DB metrics):
-  # postgres-exporter:
-  #   image: quay.io/prometheuscommunity/postgres-exporter:v0.15.0
-  #   environment:
-  #     DATA_SOURCE_NAME: "postgresql://iam:iam_pass@db-iam:5432/iam_db?sslmode=disable"
-  #     PG_EXPORTER_AUTO_DISCOVER_DATABASES: "true"
-  #   ports: ["9187:9187"]
-  #   depends_on: [db-iam]
-  #   networks: [backend]
-  #   restart: unless-stopped
-  #
-  # mongodb-exporter:
-  #   image: percona/mongodb_exporter:0.44
-  #   command:
-  #     - "--mongodb.uri=mongodb://ai:ai_pass@db-ai:27017"
-  #     - "--collect-all"
-  #     - "--compatible-mode"
-  #   ports: ["9216:9216"]
-  #   depends_on: [db-ai]
-  #   networks: [backend]
-  #   restart: unless-stopped
+  postgres-exporter:
+    image: quay.io/prometheuscommunity/postgres-exporter:v0.15.0
+    environment:
+      DATA_SOURCE_NAME: "postgresql://iam:${DB_IAM_PASSWORD:-iam_pass}@db-iam:5432/iam_db?sslmode=disable"
+      PG_EXPORTER_AUTO_DISCOVER_DATABASES: "true"
+    ports: ["9187:9187"]
+    depends_on: [db-iam]
+    networks: [backend]
+    restart: unless-stopped
+
+  mongodb-exporter:
+    image: percona/mongodb_exporter:0.44
+    command:
+      - "--mongodb.uri=mongodb://ai:${DB_AI_PASSWORD:-ai_pass}@db-ai:27017"
+      - "--collect-all"
+      - "--compatible-mode"
+    ports: ["9216:9216"]
+    depends_on: [db-ai]
+    networks: [backend]
+    restart: unless-stopped
 
   # ─── PROMETHEUS ──────────────────────────────────────────────
   prometheus:

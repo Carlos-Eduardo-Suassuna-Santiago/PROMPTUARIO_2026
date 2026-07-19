@@ -17,7 +17,7 @@ class Settings(BaseSettings):
     RABBITMQ_URL: str = "amqp://promptuario:promptuario_pass@localhost:5672/"
     REDIS_URL: str = "redis://localhost:6379/2"
 
-    JWT_SECRET_KEY: str = "change-me-in-production"
+    JWT_SECRET_KEY: str
     JWT_ALGORITHM: str = "HS256"
 
     # LLM configuration

@@ -12,7 +12,7 @@ class Settings(BaseSettings):
     CELERY_RESULT_BACKEND: str = "redis://localhost:6379/1"
     RABBITMQ_URL: str = "amqp://promptuario:promptuario_pass@localhost:5672/"
 
-    JWT_SECRET_KEY: str = "change-me-in-production"
+    JWT_SECRET_KEY: str
     JWT_ALGORITHM: str = "HS256"
 
     S3_ENDPOINT: str = "http://localhost:9000"

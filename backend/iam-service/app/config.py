@@ -20,7 +20,7 @@ class Settings(BaseSettings):
     RABBITMQ_URL: str = "amqp://promptuario:promptuario_pass@localhost:5672/"
 
     # JWT
-    JWT_SECRET_KEY: str = "change-me-in-production"
+    JWT_SECRET_KEY: str
     JWT_ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
