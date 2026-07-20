@@ -360,7 +360,7 @@ services:
   postgres-exporter:
     image: quay.io/prometheuscommunity/postgres-exporter:v0.15.0
     environment:
-      DATA_SOURCE_NAME: "postgresql://iam:$${DB_IAM_PASSWORD:-iam_pass}@db-iam:5432/iam_db?sslmode=disable"
+      DATA_SOURCE_NAME: "postgresql://iam:${DB_IAM_PASSWORD:-iam_pass}@db-iam:5432/iam_db?sslmode=disable"
       PG_EXPORTER_AUTO_DISCOVER_DATABASES: "true"
     ports: ["9187:9187"]
     depends_on: [db-iam]
@@ -370,7 +370,7 @@ services:
   mongodb-exporter:
     image: percona/mongodb_exporter:0.44
     command:
-      - "--mongodb.uri=mongodb://ai:$${DB_AI_PASSWORD:-ai_pass}@db-ai:27017"
+      - "--mongodb.uri=mongodb://ai:${DB_AI_PASSWORD:-ai_pass}@db-ai:27017"
       - "--collect-all"
       - "--compatible-mode"
     ports: ["9216:9216"]
