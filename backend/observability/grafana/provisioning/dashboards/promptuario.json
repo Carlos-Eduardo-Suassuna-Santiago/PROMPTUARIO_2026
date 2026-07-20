@@ -1057,7 +1057,7 @@
       },
       "targets": [
         {
-          "expr": "rate(rabbitmq_queue_messages_publish_total[5m])",
+          "expr": "rate(rabbitmq_queue_messages_published_total[5m])",
           "legendFormat": "Publicadas - {{queue}}",
           "refId": "A"
         }
