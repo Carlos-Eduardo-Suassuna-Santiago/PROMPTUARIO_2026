@@ -173,3 +173,5 @@ Com a API rodando segura e de forma automatizada no backend, o último passo é 
 6. Clique em **Deploy**.
 
 **Pronto! Sua aplicação completa está em nuvem, criptografada, balanceada entre dois provedores top de linha, de forma totalmente gratuita!**
+
+<!-- Last updated by agent -->
