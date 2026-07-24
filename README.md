@@ -1,6 +1,7 @@
 # Promptuário
 
-[![CI Backend](https://github.com/Carlos-Eduardo-Suassuna-Santiago/PROMPTUARIO_2026/actions/workflows/ci-service.yml/badge.svg?branch=developer)](https://github.com/Carlos-Eduardo-Suassuna-Santiago/PROMPTUARIO_2026/actions/workflows/ci-service.yml)
+[![CI Backend](https://github.com/Carlos-Eduardo-Suassuna-Santiago/PROMPTUARIO_2026/actions/workflows/backend-ci.yml/badge.svg?branch=main)](https://github.com/Carlos-Eduardo-Suassuna-Santiago/PROMPTUARIO_2026/actions/workflows/backend-ci.yml)
+
 
 ## Proposta do projeto
 
